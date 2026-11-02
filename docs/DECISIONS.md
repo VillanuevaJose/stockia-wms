@@ -1,0 +1,14 @@
+# Decisiones de Diseño y Arquitectura
+- Paleta y canvas: Uso estricto de #fafafa de fondo, tarjetas blancas (#ffffff) con borde hairline #ebebeb y texto principal #171717 según el spec de Vercel.
+- Botones de acción: Botón principal en negro sólido #171717 con radio de 6px y active:scale-[0.98]; botones secundarios en blanco con borde #ebebeb.
+- Tipografía y números: Fuente Geist sans para títulos/etiquetas con tracking ajustado; font-mono restringido únicamente a SKUs, importes en soles y cantidades.
+- Datos vacíos en desarrollo: Inyección de datos de catálogo del sector ferretero (Bosch, abrasivos, EPP) como fallback para evitar métricas en cero o tablas vacías.
+- Consistencia de modales y drawers: Conversión de diálogos y paneles deslizables a radio de 8px con bordes #ebebeb y fondo backdrop sutil black/40.
+- Navegación instantánea: Eliminación del flag bloqueante `instant = false` e incorporación de `app/admin/loading.tsx` y `prefetch={true}` en sidebar para cambio de página en 0ms.
+- Flujo de redirección login: Regex estricta en cookies de auth y redirección nativa en servidor con redirect('/admin') para ingreso inmediato.
+- Caché de lectura en memoria: `withFastCache` almacena consultas de lectura por 15-30s con invalidación automática en mutaciones de acciones del servidor.
+- Tipografía Apple: Configuración de SF Pro Display / Text y SF Mono como fuentes maestras del proyecto con suavizado antialiased.
+- Animaciones fluidas: Implementación de curvas cúbicas Apple (180ms ease-out) y micro-escalado en pulsación (0.975) con soporte a prefers-reduced-motion.
+- Rediseño visual editorial: Paleta papel/tinta (#FAFAF7/#16201C), Manrope exclusivo en toda la jerarquía tipográfica, JetBrains Mono para SKUs, cifras sin caja y semáforo punto+texto.
+- Fase 3 producción real: Multi-tenancy UUID con RLS, onboarding transaccional, POS con precio en servidor, Culqi condicional, compras con entrada automática y exportación CSV.
+- Integración 3 sedes y comunicación: Red de 3 sedes operativas oficiales (Central, Norte Callao, Sur Lurín) y tabla solicitud_traslado con historial inter-sedes.

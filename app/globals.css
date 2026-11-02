@@ -1,0 +1,124 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-mono), monospace;
+
+  /* Paleta Cuaderno de Bodega: Papel, Tinta y Líneas */
+  --color-paper: var(--bg-paper);
+  --color-paper-subtle: var(--bg-paper-subtle);
+  --color-surface: var(--bg-surface);
+  --color-ink: var(--text-ink);
+  --color-ink-muted: var(--text-muted);
+  --color-line: var(--border-line);
+  --color-line-subtle: var(--border-subtle);
+
+  /* Acento único Ámbar con mucha moderación */
+  --color-amber-accent: #E8A33D;
+  --color-amber-accent-muted: #F8F1E5;
+
+  /* Semáforo de stock (únicamente punto + texto) */
+  --color-stock-ok: #2A7A4C;
+  --color-stock-warn: #C97D1A;
+  --color-stock-alert: #C93B3B;
+
+  /* Radii estrictos: máx 6px inputs/botones, 8px paneles */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+:root {
+  --bg-paper: #FAFAF7;
+  --bg-paper-subtle: #F4F3EF;
+  --bg-surface: #FFFFFF;
+  --text-ink: #16201C;
+  --text-muted: #6B7A72;
+  --border-line: #E7E5DF;
+  --border-subtle: #F0EEEA;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-paper: #141716;
+    --bg-paper-subtle: #191D1B;
+    --bg-surface: #1B201E;
+    --text-ink: #EDECE8;
+    --text-muted: #8E9B94;
+    --border-line: #2A312E;
+    --border-subtle: #222825;
+  }
+}
+
+body {
+  background-color: var(--bg-paper);
+  color: var(--text-ink);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tipografía de precisión numérica */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Títulos Manrope: 600-700, letter-spacing -0.02em, interlineado 1.15 */
+.heading-title {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+/* Cifras grandes KPIs: Manrope 600-700 con tabular-nums */
+.kpi-figure {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Etiquetas pequeñas en mayúsculas: Manrope 600, 11-12px, tracking +0.06em */
+.label-caps {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Panel operacional sobrio: fondo blanco/superficie, borde 1px, sin sombras grandes */
+.ops-panel {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-line);
+  border-radius: 8px;
+}
+
+/* Transiciones sobrias y funcionales */
+.ops-fade-in {
+  animation: opsFadeIn 140ms ease-out forwards;
+}
+
+@keyframes opsFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ops-fade-in {
+    animation: none !important;
+    transform: none !important;
+  }
+}
