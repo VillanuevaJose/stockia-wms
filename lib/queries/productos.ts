@@ -17,11 +17,9 @@ export interface FiltrosProductos {
 }
 
 export async function getProductos(filtros: FiltrosProductos = {}) {
-  const cacheKey = `productos-${filtros.categoria_id || 'all'}-${filtros.stock_bajo ? 'bajo' : 'all'}-${filtros.q || ''}-${filtros.page || 1}`
-  return withFastCache(cacheKey, 15, async () => {
-    const supabase = await createClient()
+  const supabase = await createClient()
 
-    const page = filtros.page && filtros.page > 0 ? filtros.page : 1
+  const page = filtros.page && filtros.page > 0 ? filtros.page : 1
   const pageSize = filtros.pageSize || 15
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
@@ -43,16 +41,16 @@ export async function getProductos(filtros: FiltrosProductos = {}) {
       precio_soles,
       stock_minimo,
       stock,
-      imagen_url,
       activo,
       fecha_creacion,
       updated_at,
       categoria:categoria_id (id, nombre),
-      unidad_medida:unidad_medida_id (id, codigo, nombre)
+      unidad_medida:unidad_medida_id (id, codigo, nombre),
+      inventario (stock_actual)
     `,
       { count: 'exact' }
     )
-    .order('fecha_creacion', { ascending: false })
+    .order('nombre', { ascending: true })
     .range(from, to)
 
   if (filtros.activo !== undefined) {
@@ -81,9 +79,20 @@ export async function getProductos(filtros: FiltrosProductos = {}) {
     }
   }
 
-  let finalData = (data || []) as unknown as ProductoRow[]
+  let finalData = ((data || []) as unknown as Array<
+    ProductoRow & { inventario?: { stock_actual: number }[] }
+  >).map((p) => {
+    const stockInventario = Array.isArray(p.inventario)
+      ? p.inventario.reduce((acc, item) => acc + (Number(item.stock_actual) || 0), 0)
+      : 0
+    const stockReal = stockInventario > 0 ? stockInventario : Number(p.stock) || 0
+    return {
+      ...p,
+      stock: stockReal,
+      precio_venta: Number(p.precio_venta) || Number(p.precio_soles) || 0,
+    }
+  })
 
-  // Filtro en memoria para stock bajo (stock <= stock_minimo)
   if (filtros.stock_bajo) {
     finalData = finalData.filter((p) => Number(p.stock) <= Number(p.stock_minimo))
   }
@@ -98,7 +107,6 @@ export async function getProductos(filtros: FiltrosProductos = {}) {
     pageSize,
     totalPages,
   }
-  })
 }
 
 export async function getCategorias() {
