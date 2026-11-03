@@ -106,6 +106,25 @@ BEGIN
     ON CONFLICT (negocio_id, nombre) DO UPDATE SET descripcion = EXCLUDED.descripcion
     RETURNING id INTO v_cat_fijaciones;
 
+    -- 3b. CATEGORÍAS ADICIONALES (sin variable, solo catálogo)
+    INSERT INTO public.categoria (negocio_id, nombre, descripcion) VALUES
+        (v_negocio_id, 'Plomería y Gasfitería', 'Tuberías PVC/CPVC, válvulas, llaves de paso, pegamentos y accesorios sanitarios'),
+        (v_negocio_id, 'Herramientas Eléctricas', 'Taladros, amoladoras, rotomartillos, sierras circulares y caladoras profesionales'),
+        (v_negocio_id, 'Construcción y Acabados', 'Cemento, yeso, masilla, fragua, porcelanato, cerámicos y materiales de obra gruesa y fina'),
+        (v_negocio_id, 'Iluminación', 'Focos LED, fluorescentes, reflectores, luminarias de panel, cintas LED y accesorios de alumbrado'),
+        (v_negocio_id, 'Cerrajería y Seguridad', 'Candados, cerraduras, bisagras, picaportes, cerrojos y sistemas de seguridad para puertas'),
+        (v_negocio_id, 'Adhesivos y Selladores', 'Silicona, pegamento epóxico, cinta de teflón, cinta aislante, cola sintética y selladores de poliuretano'),
+        (v_negocio_id, 'Jardinería y Exteriores', 'Mangueras, aspersores, tijeras de podar, rastrillos, palas y herramientas de jardín'),
+        (v_negocio_id, 'Abrasivos y Discos', 'Discos de corte, discos de desbaste, lijas al agua, lijas de banda y piedras de afilar'),
+        (v_negocio_id, 'Soldadura', 'Electrodos, máquinas de soldar, caretas, estaño, fundentes y accesorios para soldadura'),
+        (v_negocio_id, 'Medición y Trazo', 'Cintas métricas, niveles, escuadras, flexómetros, calibradores y niveles láser'),
+        (v_negocio_id, 'Limpieza Industrial', 'Desengrasantes, limpiadores multiuso, escobas industriales, trapeadores y paños absorbentes'),
+        (v_negocio_id, 'Ferretería General', 'Cadenas, alambres, ganchos, poleas, cuerdas, cintas de amarre y accesorios varios'),
+        (v_negocio_id, 'Bombas y Motores', 'Bombas de agua, motobombas, electrobombas sumergibles y motores eléctricos monofásicos y trifásicos'),
+        (v_negocio_id, 'Automotriz', 'Aceites, lubricantes, filtros, gatas hidráulicas, llaves de rueda y accesorios para vehículos'),
+        (v_negocio_id, 'Almacenamiento y Organización', 'Estanterías metálicas, cajas organizadoras, gabinetes, racks de almacén y contenedores industriales')
+    ON CONFLICT (negocio_id, nombre) DO UPDATE SET descripcion = EXCLUDED.descripcion;
+
     -- 4. UNIDADES DE MEDIDA
     INSERT INTO public.unidad_medida (negocio_id, codigo, nombre)
     VALUES (v_negocio_id, 'UND', 'Unidad')

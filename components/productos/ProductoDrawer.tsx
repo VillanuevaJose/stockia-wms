@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useActionState, useEffect } from 'react'
-import { X, AlertTriangle } from '../ui/icons'
+import React, { useActionState, useEffect, useRef, useState } from 'react'
+import { X, AlertTriangle, ScanBarcode } from '../ui/icons'
+import { BarcodeScanner } from './BarcodeScanner'
 import { agregarProducto, editarProducto, type FormState } from '../../app/admin/actions'
 import { toast } from '../ui/Toast'
 import type { ProductoRow } from '../../lib/queries/productos'
@@ -42,6 +43,8 @@ export function ProductoDrawer({
   almacenes,
 }: ProductoDrawerProps) {
   const isEditing = Boolean(productoEditar)
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const barcodeInputRef = useRef<HTMLInputElement>(null)
 
   const action = isEditing ? editarProducto : agregarProducto
   const [state, formAction, isPending] = useActionState<FormState | null, FormData>(action, null)
@@ -131,13 +134,24 @@ export function ProductoDrawer({
               <label className="block text-xs font-semibold text-[#16201C] mb-1">
                 Código de Barras (EAN/UPC)
               </label>
-              <input
-                type="text"
-                name="codigo_barras"
-                defaultValue={productoEditar?.codigo_barras || ''}
-                placeholder="7751234000018"
-                className="w-full px-2.5 py-1.5 text-xs font-mono bg-white border border-[#E7E5DF] rounded-[6px] focus:border-[#16201C] focus:ring-1 focus:ring-[#E8A33D] focus:outline-none"
-              />
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  name="codigo_barras"
+                  ref={barcodeInputRef}
+                  defaultValue={productoEditar?.codigo_barras || ''}
+                  placeholder="7751234000018"
+                  className="flex-1 min-w-0 px-2.5 py-1.5 text-xs font-mono bg-white border border-[#E7E5DF] rounded-[6px] focus:border-[#16201C] focus:ring-1 focus:ring-[#E8A33D] focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => setScannerOpen(true)}
+                  title="Escanear con cámara"
+                  className="shrink-0 px-2 py-1.5 rounded-[6px] border border-[#E7E5DF] bg-white hover:bg-[#F4F3EF] text-[#6B7A72] hover:text-[#16201C] transition-colors cursor-pointer"
+                >
+                  <ScanBarcode size={16} />
+                </button>
+              </div>
               <p className="text-[11px] text-[#6B7A72] mt-0.5">Lectura óptica para escáner</p>
             </div>
           </div>
@@ -334,6 +348,23 @@ export function ProductoDrawer({
             </button>
           </div>
         </form>
+
+        {/* Escáner de código de barras con cámara */}
+        <BarcodeScanner
+          isOpen={scannerOpen}
+          onClose={() => setScannerOpen(false)}
+          onScan={(code) => {
+            if (barcodeInputRef.current) {
+              // Usar nativeInputValueSetter para que React detecte el cambio
+              const nativeSetter = Object.getOwnPropertyDescriptor(
+                HTMLInputElement.prototype,
+                'value'
+              )?.set
+              nativeSetter?.call(barcodeInputRef.current, code)
+              barcodeInputRef.current.dispatchEvent(new Event('input', { bubbles: true }))
+            }
+          }}
+        />
       </div>
     </div>
   )
