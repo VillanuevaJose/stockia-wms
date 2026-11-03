@@ -27,7 +27,7 @@ export type FormState = {
   message?: string
 }
 
-// 1. Acción para CREAR un producto con opción de stock inicial mediante registrar_movimiento
+// 1. Acción para CREAR un producto y asegurar su stock inmediato en inventario y productos
 export async function agregarProducto(
   prevState: FormState | null,
   formData: FormData
@@ -63,13 +63,12 @@ export async function agregarProducto(
   // Obtener negocio del usuario
   const { data: usuarioPerfil } = await supabase
     .from('usuarios')
-    .select('negocio_id')
+    .select('negocio_id, almacen_id')
     .eq('id', user.id)
     .single()
 
   let negocioId = usuarioPerfil?.negocio_id
   if (!negocioId) {
-    // Fallback al primer negocio del sistema
     const { data: primerNegocio } = await supabase
       .from('negocio')
       .select('id')
@@ -78,7 +77,22 @@ export async function agregarProducto(
     negocioId = primerNegocio?.id
   }
 
-  // 1. Insertar el producto en la tabla productos (stock inicia en 0)
+  // Resolver almacén destino si no viene en el form
+  let almacenId = validated.data.almacen_id || usuarioPerfil?.almacen_id
+  if (!almacenId && negocioId) {
+    const { data: alm } = await supabase
+      .from('almacen')
+      .select('id')
+      .eq('negocio_id', negocioId)
+      .eq('es_principal', true)
+      .limit(1)
+      .single()
+    almacenId = alm?.id
+  }
+
+  const stockInicial = validated.data.stock_inicial
+
+  // 1. Insertar el producto con su stock directo en la tabla productos
   const { data: nuevoProducto, error: prodError } = await supabase
     .from('productos')
     .insert([
@@ -94,7 +108,7 @@ export async function agregarProducto(
         precio_venta: validated.data.precio_venta,
         precio_soles: validated.data.precio_venta,
         stock_minimo: validated.data.stock_minimo,
-        stock: 0,
+        stock: stockInicial,
         activo: true,
       },
     ])
@@ -108,36 +122,25 @@ export async function agregarProducto(
     return { success: false, error: 'Error al registrar producto: ' + prodError.message }
   }
 
-  // 2. Si se especificó stock inicial, registrar movimiento formal de ENTRADA
-  if (validated.data.stock_inicial > 0 && validated.data.almacen_id && nuevoProducto?.id) {
-    const { error: movError } = await supabase.rpc('registrar_movimiento', {
-      p_negocio_id: negocioId,
-      p_usuario_id: user.id,
-      p_tipo: 'ENTRADA',
-      p_motivo: 'Inventario inicial al crear ficha de producto',
-      p_almacen_destino_id: validated.data.almacen_id,
-      p_detalles: [
-        {
-          producto_id: nuevoProducto.id,
-          cantidad: validated.data.stock_inicial,
-          costo_unitario: validated.data.costo,
-        },
-      ],
-      p_referencia_tipo: 'INVENTARIO_INICIAL',
-    })
-
-    if (movError) {
-      console.warn('Aviso: Producto creado, pero falló el registro del stock inicial:', movError.message)
-    }
+  // 2. Si hay almacén, asegurar el registro directo en la tabla inventario físico
+  if (almacenId && nuevoProducto?.id) {
+    await supabase.from('inventario').upsert([
+      {
+        almacen_id: almacenId,
+        producto_id: nuevoProducto.id,
+        stock_actual: stockInicial,
+      },
+    ], { onConflict: 'almacen_id,producto_id' })
   }
 
   invalidateFastCache()
   revalidatePath('/admin')
   revalidatePath('/admin/productos')
+  revalidatePath('/admin/inventario')
   return { success: true, message: 'Producto registrado correctamente.' }
 }
 
-// 2. Acción para EDITAR datos maestros de un producto (sin mutación directa de stock)
+// 2. Acción para EDITAR datos maestros de un producto
 export async function editarProducto(
   prevState: FormState | null,
   formData: FormData
@@ -194,6 +197,7 @@ export async function editarProducto(
   invalidateFastCache()
   revalidatePath('/admin')
   revalidatePath('/admin/productos')
+  revalidatePath('/admin/inventario')
   return { success: true, message: 'Producto actualizado exitosamente.' }
 }
 
@@ -217,9 +221,9 @@ export async function desactivarProducto(formData: FormData): Promise<void> {
   invalidateFastCache()
   revalidatePath('/admin')
   revalidatePath('/admin/productos')
+  revalidatePath('/admin/inventario')
 }
 
-// Compatibilidad con el botón antiguo eliminar
 export async function eliminarProducto(formData: FormData): Promise<void> {
   return desactivarProducto(formData)
 }
@@ -233,9 +237,6 @@ export interface ProductoImportItem {
   sku?: string
 }
 
-/**
- * 4. Acción para CARGA MASIVA de productos desde texto o CSV
- */
 export async function importarProductosMasivoAction(
   items: ProductoImportItem[],
   almacenId?: string
@@ -245,9 +246,7 @@ export async function importarProductosMasivoAction(
   }
 
   const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Sesión no activa.', agregados: 0 }
 
   const { data: usuarioPerfil } = await supabase
@@ -270,7 +269,6 @@ export async function importarProductosMasivoAction(
     return { success: false, error: 'No se encontró negocio activo.', agregados: 0 }
   }
 
-  // Resolver almacén destino
   let targetAlmacenId = almacenId || usuarioPerfil?.almacen_id
   if (!targetAlmacenId) {
     const { data: alm } = await supabase
@@ -308,7 +306,7 @@ export async function importarProductosMasivoAction(
           costo,
           precio_venta: precio,
           precio_soles: precio,
-          stock: 0,
+          stock,
           stock_minimo: 3,
           activo: true,
         },
@@ -316,37 +314,25 @@ export async function importarProductosMasivoAction(
       .select('id')
       .single()
 
-    if (errInsert || !nuevo?.id) {
-      console.warn('Error al importar fila:', item.nombre, errInsert?.message)
-      continue
-    }
+    if (errInsert || !nuevo?.id) continue
 
     agregados++
 
-    // Si tiene stock inicial y almacén destino, registrar movimiento de entrada formal
-    if (stock > 0 && targetAlmacenId) {
-      await supabase.rpc('registrar_movimiento', {
-        p_negocio_id: negocioId,
-        p_usuario_id: user.id,
-        p_tipo: 'ENTRADA',
-        p_motivo: 'Carga masiva de inventario inicial',
-        p_almacen_destino_id: targetAlmacenId,
-        p_detalles: [
-          {
-            producto_id: nuevo.id,
-            cantidad: stock,
-            costo_unitario: costo,
-          },
-        ],
-        p_referencia_tipo: 'INVENTARIO_INICIAL',
-      })
+    if (targetAlmacenId) {
+      await supabase.from('inventario').upsert([
+        {
+          almacen_id: targetAlmacenId,
+          producto_id: nuevo.id,
+          stock_actual: stock,
+        },
+      ], { onConflict: 'almacen_id,producto_id' })
     }
   }
 
   invalidateFastCache()
   revalidatePath('/admin')
   revalidatePath('/admin/productos')
-  revalidatePath('/vendedor')
+  revalidatePath('/admin/inventario')
 
   return {
     success: agregados > 0,
