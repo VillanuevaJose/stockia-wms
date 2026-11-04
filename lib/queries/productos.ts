@@ -42,7 +42,7 @@ export async function getProductos(filtros: FiltrosProductos = {}) {
       stock_minimo,
       stock,
       activo,
-      fecha_creacion,
+      created_at,
       updated_at,
       categoria:categoria_id (id, nombre),
       unidad_medida:unidad_medida_id (id, codigo, nombre),
@@ -82,14 +82,15 @@ export async function getProductos(filtros: FiltrosProductos = {}) {
   let finalData = ((data || []) as unknown as Array<
     ProductoRow & { inventario?: { stock_actual: number }[] }
   >).map((p) => {
-    const stockInventario = Array.isArray(p.inventario)
-      ? p.inventario.reduce((acc, item) => acc + (Number(item.stock_actual) || 0), 0)
-      : 0
-    const stockReal = stockInventario > 0 ? stockInventario : Number(p.stock) || 0
+    const invList = Array.isArray(p.inventario) ? p.inventario : []
+    const stockInventario = invList.reduce((acc, item) => acc + (Number(item.stock_actual) || 0), 0)
+    const stockReal = invList.length > 0 ? stockInventario : Number(p.stock) || 0
     return {
       ...p,
       stock: stockReal,
       precio_venta: Number(p.precio_venta) || Number(p.precio_soles) || 0,
+      created_at: p.created_at,
+      fecha_creacion: p.created_at,
     }
   })
 

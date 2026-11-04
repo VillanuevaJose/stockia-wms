@@ -155,6 +155,7 @@ ALTER TABLE public.productos ADD COLUMN IF NOT EXISTS precio_venta NUMERIC(12, 2
 ALTER TABLE public.productos ADD COLUMN IF NOT EXISTS stock_minimo NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (stock_minimo >= 0);
 ALTER TABLE public.productos ADD COLUMN IF NOT EXISTS imagen_url TEXT;
 ALTER TABLE public.productos ADD COLUMN IF NOT EXISTS activo BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE public.productos ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE public.productos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 -- Sincronizar precio_soles y precio_venta bidireccionalmente para no romper código previo

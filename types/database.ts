@@ -230,7 +230,8 @@ export interface Database {
           stock: number
           imagen_url: string | null
           activo: boolean
-          fecha_creacion: string
+          created_at: string
+          fecha_creacion?: string
           updated_at: string
         }
         Insert: {
@@ -249,6 +250,7 @@ export interface Database {
           stock?: number
           imagen_url?: string | null
           activo?: boolean
+          created_at?: string
           fecha_creacion?: string
           updated_at?: string
         }
@@ -268,6 +270,7 @@ export interface Database {
           stock?: number
           imagen_url?: string | null
           activo?: boolean
+          created_at?: string
           fecha_creacion?: string
           updated_at?: string
         }

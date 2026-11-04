@@ -12,3 +12,4 @@
 - Rediseño visual editorial: Paleta papel/tinta (#FAFAF7/#16201C), Manrope exclusivo en toda la jerarquía tipográfica, JetBrains Mono para SKUs, cifras sin caja y semáforo punto+texto.
 - Fase 3 producción real: Multi-tenancy UUID con RLS, onboarding transaccional, POS con precio en servidor, Culqi condicional, compras con entrada automática y exportación CSV.
 - Integración 3 sedes y comunicación: Red de 3 sedes operativas oficiales (Central, Norte Callao, Sur Lurín) y tabla solicitud_traslado con historial inter-sedes.
+- Corrección catálogo maestro: Alineación de columna temporal de productos a created_at y consolidación robusta de existencias con inventario físico.

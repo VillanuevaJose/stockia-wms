@@ -43,10 +43,10 @@ export function BarcodeScanner({ isOpen, onClose, onScan }: BarcodeScannerProps)
 
     let cancelled = false
     hasScannedRef.current = false
-    setError(null)
-    setIsStarting(true)
 
     const startScanner = async () => {
+      setError(null)
+      setIsStarting(true)
       try {
         const { Html5Qrcode } = await import('html5-qrcode')
 

@@ -17,6 +17,7 @@ interface ProductosPageProps {
   }>
 }
 
+export const dynamic = 'force-dynamic'
 export default async function ProductosPage({ searchParams }: ProductosPageProps) {
   const resolvedParams = await searchParams
 
