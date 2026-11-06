@@ -32,6 +32,13 @@ export default async function VentasPage() {
             <span className="font-mono text-[12px] text-[#6B7A72] tabular-nums">
               {ventas.length} {ventas.length === 1 ? 'comprobante' : 'comprobantes'}
             </span>
+            <a
+              href="/api/reportes/ventas?format=xlsx"
+              download
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border border-[#E7E5DF] hover:border-[#16201C] bg-white text-[#16201C] text-[13px] font-medium transition-colors cursor-pointer"
+            >
+              Exportar Excel (.xlsx)
+            </a>
             <Link
               href="/vendedor"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-[#16201C] hover:bg-[#2A3B34] text-white text-[13px] font-medium transition-colors cursor-pointer"

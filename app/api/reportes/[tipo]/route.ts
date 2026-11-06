@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '../../../../lib/supabase/server'
+import {
+  generarExcelInventario,
+  generarExcelVentas,
+  generarExcelKardex,
+  ProductoReporte,
+  VentaReporte,
+  MovimientoReporte,
+} from '../../../../lib/excel/reportes'
 
 interface RouteParams {
   params: Promise<{
@@ -21,7 +29,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
   const { data: usuario } = await supabase
     .from('usuarios')
-    .select('negocio_id')
+    .select('negocio_id, negocio:negocio_id (nombre)')
     .eq('id', user.id)
     .single()
 
@@ -30,14 +38,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   }
 
   const negocio_id = usuario.negocio_id
+  // @ts-expect-error Supabase relation
+  const bizName = usuario.negocio?.nombre || 'Stockia WMS'
+
   const searchParams = request.nextUrl.searchParams
+  const format = searchParams.get('format') || 'xlsx'
   const desde = searchParams.get('desde')
   const hasta = searchParams.get('hasta')
 
-  const BOM = '\uFEFF'
-  let csvContent = ''
-  const filename = `reporte-${tipo}-${new Date().toISOString().slice(0, 10)}.csv`
+  const dateStr = new Date().toISOString().slice(0, 10)
 
+  // 1. INVENTARIO
   if (tipo === 'inventario') {
     const { data: prods } = await supabase
       .from('productos')
@@ -55,20 +66,32 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .eq('activo', true)
       .order('nombre')
 
+    const prodsList = (prods || []) as ProductoReporte[]
+
+    if (format === 'xlsx') {
+      const bytes = generarExcelInventario(prodsList, bizName)
+      return new Response(bytes as unknown as BodyInit, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="reporte-inventario-${dateStr}.xlsx"`,
+        },
+      })
+    }
+
+    // CSV Fallback
+    const BOM = '\uFEFF'
     const rows = [
       ['SKU', 'Producto', 'Categoría', 'Unidad', 'Stock Actual', 'Stock Mínimo', 'Costo Unitario (S/)', 'Precio Venta (S/)', 'Valorización (S/)'],
     ]
-
-    ;(prods || []).forEach((p) => {
+    prodsList.forEach((p) => {
       const stock = Number(p.stock) || 0
       const costo = Number(p.costo) || 0
       const precio = Number(p.precio_soles) || 0
       rows.push([
         p.sku,
         `"${p.nombre.replace(/"/g, '""')}"`,
-        // @ts-expect-error Supabase nested
         `"${p.categoria?.nombre || 'General'}"`,
-        // @ts-expect-error Supabase nested
         p.unidad?.codigo || 'UND',
         stock.toString(),
         (Number(p.stock_minimo) || 0).toString(),
@@ -78,8 +101,17 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ])
     })
 
-    csvContent = rows.map((r) => r.join(',')).join('\n')
-  } else if (tipo === 'kardex') {
+    return new NextResponse(BOM + rows.map((r) => r.join(',')).join('\n'), {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="reporte-inventario-${dateStr}.csv"`,
+      },
+    })
+  }
+
+  // 2. KARDEX / MOVIMIENTOS
+  if (tipo === 'kardex') {
     let query = supabase
       .from('movimiento_inventario')
       .select(`
@@ -98,28 +130,47 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (hasta) query = query.lte('fecha', hasta)
 
     const { data: movs } = await query
+    const movsList = (movs || []) as MovimientoReporte[]
 
+    if (format === 'xlsx') {
+      const bytes = generarExcelKardex(movsList, bizName)
+      return new Response(bytes as unknown as BodyInit, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="reporte-kardex-${dateStr}.xlsx"`,
+        },
+      })
+    }
+
+    // CSV Fallback
+    const BOM = '\uFEFF'
     const rows = [
       ['Fecha y Hora', 'Tipo', 'Operación / Motivo', 'Referencia', 'Almacén Origen', 'Almacén Destino', 'Operador'],
     ]
-
-    ;(movs || []).forEach((m) => {
+    movsList.forEach((m) => {
       rows.push([
         new Date(m.fecha).toLocaleString('es-PE'),
         m.tipo,
         `"${m.motivo.replace(/"/g, '""')}"`,
         m.referencia_tipo || '',
-        // @ts-expect-error Supabase nested
         `"${m.almacen_origen?.nombre || 'N/A'}"`,
-        // @ts-expect-error Supabase nested
         `"${m.almacen_destino?.nombre || 'N/A'}"`,
-        // @ts-expect-error Supabase nested
         `"${m.usuario?.nombre_completo || 'Sistema'}"`,
       ])
     })
 
-    csvContent = rows.map((r) => r.join(',')).join('\n')
-  } else if (tipo === 'ventas') {
+    return new NextResponse(BOM + rows.map((r) => r.join(',')).join('\n'), {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="reporte-kardex-${dateStr}.csv"`,
+      },
+    })
+  }
+
+  // 3. VENTAS
+  if (tipo === 'ventas') {
     let query = supabase
       .from('venta')
       .select(`
@@ -140,19 +191,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     if (hasta) query = query.lte('fecha_emision', hasta)
 
     const { data: ventas } = await query
+    const ventasList = (ventas || []) as VentaReporte[]
 
+    if (format === 'xlsx') {
+      const bytes = generarExcelVentas(ventasList, bizName)
+      return new Response(bytes as unknown as BodyInit, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'Content-Disposition': `attachment; filename="reporte-ventas-${dateStr}.xlsx"`,
+        },
+      })
+    }
+
+    // CSV Fallback
+    const BOM = '\uFEFF'
     const rows = [
       ['Comprobante', 'Fecha Emisión', 'Cliente', 'Vendedor', 'Estado', 'Subtotal (S/)', 'IGV (S/)', 'Total (S/)'],
     ]
-
-    ;(ventas || []).forEach((v) => {
+    ventasList.forEach((v) => {
       const numComp = `${v.serie}-${String(v.correlativo).padStart(8, '0')}`
       rows.push([
         numComp,
         new Date(v.fecha_emision).toLocaleString('es-PE'),
-        // @ts-expect-error Supabase nested
         `"${v.cliente?.nombre || 'Público General'}"`,
-        // @ts-expect-error Supabase nested
         `"${v.usuario?.nombre_completo || 'Vendedor'}"`,
         v.estado,
         Number(v.subtotal).toFixed(2),
@@ -161,16 +223,14 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       ])
     })
 
-    csvContent = rows.map((r) => r.join(',')).join('\n')
-  } else {
-    return new NextResponse('Tipo de reporte no soportado', { status: 400 })
+    return new NextResponse(BOM + rows.map((r) => r.join(',')).join('\n'), {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="reporte-ventas-${dateStr}.csv"`,
+      },
+    })
   }
 
-  return new NextResponse(BOM + csvContent, {
-    status: 200,
-    headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-    },
-  })
+  return new NextResponse('Tipo de reporte no soportado', { status: 400 })
 }

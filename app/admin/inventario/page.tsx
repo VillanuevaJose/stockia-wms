@@ -34,11 +34,11 @@ export default async function InventarioPage() {
 
           <div className="flex items-center gap-2">
             <a
-              href="/api/reportes/inventario"
+              href="/api/reportes/inventario?format=xlsx"
               download
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border border-[#E7E5DF] hover:border-[#16201C] bg-white text-[#16201C] text-[13px] font-medium transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border border-[#E7E5DF] hover:border-[#16201C] bg-white text-[#16201C] text-[13px] font-medium transition-colors cursor-pointer"
             >
-              Exportar CSV
+              Exportar Excel (.xlsx)
             </a>
             <Link
               href="/admin/productos"
