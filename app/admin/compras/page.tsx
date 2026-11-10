@@ -10,7 +10,7 @@ export default async function ComprasPage() {
 
   // Consultar proveedores, productos y almacenes para el drawer de compra
   const [{ data: proveedores }, { data: productos }, { data: almacenes }] = await Promise.all([
-    supabase.from('proveedor').select('id, nombre').eq('activo', true).order('nombre'),
+    supabase.from('proveedor').select('id, razon_social').eq('activo', true).order('razon_social'),
     supabase.from('productos').select('id, nombre, sku, costo').eq('activo', true).order('nombre'),
     supabase.from('almacen').select('id, nombre').eq('activo', true).order('es_principal', { ascending: false }),
   ])
@@ -33,7 +33,10 @@ export default async function ComprasPage() {
 
       <ComprasManager
         compras={compras}
-        proveedores={proveedores || []}
+        proveedores={(proveedores || []).map((p) => ({
+          id: p.id,
+          nombre: p.razon_social,
+        }))}
         productos={(productos || []).map((p) => ({
           id: p.id,
           nombre: p.nombre,

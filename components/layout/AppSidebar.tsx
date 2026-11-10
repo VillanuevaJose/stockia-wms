@@ -66,8 +66,13 @@ const navSections: NavSection[] = [
         roles: ['admin', 'vendedor'],
       },
       {
-        title: 'Compras y Proveedores',
+        title: 'Compras y Abastecimiento',
         href: '/admin/compras',
+        roles: ['admin', 'almacenero'],
+      },
+      {
+        title: 'Directorio Proveedores',
+        href: '/admin/proveedores',
         roles: ['admin', 'almacenero'],
       },
     ],

@@ -16,3 +16,5 @@
 - Generación Excel (.xlsx) nativa: Motor OpenXML propio con gráficos DrawingML, fórmulas SUM/SUMIF, KPIs y estilos editoriales sin librerías externas pesadas.
 - Onboarding B2B e invitaciones: Delegación de invitaciones vía Supabase Auth al Admin de empresa, bloqueo inmediato en auth.users y registro exclusivo de tenants en /registro.
 - Conteo físico y auditoría de mermas: Drawer de toma de inventario con balance en Soles y ajuste atómico en PostgreSQL vía registrar_movimiento.
+- Directorio maestro de proveedores: Padrón fiscal SUNAT con RUC validado, canales de contacto comercial y vinculación directa a órdenes de compra.
+- Guía de Traslado inter-sedes: Despacho en origen (SALIDA), custodia en ruta, recepción en destino (ENTRADA) y Guía de Remisión interna imprimible.

@@ -15,6 +15,8 @@ import {
   ShieldCheck,
   Trash2,
   Warehouse,
+  FileText,
+  Printer,
 } from '../ui/icons'
 import {
   crearSolicitudSedesAction,
@@ -92,6 +94,7 @@ export function ComunicacionSedesManager({
   const [respondingItem, setRespondingItem] = useState<SolicitudSedeRow | null>(null)
   const [nuevoEstado, setNuevoEstado] = useState<'EN_TRANSITO' | 'RECIBIDO' | 'RECHAZADO'>('EN_TRANSITO')
   const [respuestaTexto, setRespuestaTexto] = useState('')
+  const [guiaModalItem, setGuiaModalItem] = useState<SolicitudSedeRow | null>(null)
 
   const handleCrearSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -385,13 +388,79 @@ export function ComunicacionSedesManager({
                           <p>{item.respuesta}</p>
                         </div>
                       )}
+
+                      {/* Stepper de Progreso Logístico */}
+                      <div className="mt-3 py-2 px-3 bg-[#FAFAF7] rounded-[6px] border border-[#E7E5DF] flex items-center justify-between text-[11px] font-mono">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              item.estado !== 'RECHAZADO' ? 'bg-[#16201C]' : 'bg-zinc-400'
+                            }`}
+                          />
+                          <span
+                            className={
+                              item.estado === 'PENDIENTE'
+                                ? 'font-bold text-[#16201C]'
+                                : 'text-[#6B7A72]'
+                            }
+                          >
+                            1. Solicitado
+                          </span>
+                        </div>
+                        <ArrowRight size={12} className="text-[#6B7A72]" />
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              item.estado === 'EN_TRANSITO' || item.estado === 'RECIBIDO'
+                                ? 'bg-blue-600'
+                                : 'bg-zinc-300'
+                            }`}
+                          />
+                          <span
+                            className={
+                              item.estado === 'EN_TRANSITO'
+                                ? 'font-bold text-blue-700'
+                                : 'text-[#6B7A72]'
+                            }
+                          >
+                            2. En Ruta (Tránsito)
+                          </span>
+                        </div>
+                        <ArrowRight size={12} className="text-[#6B7A72]" />
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`w-2 h-2 rounded-full ${
+                              item.estado === 'RECIBIDO' ? 'bg-[#2E7D32]' : 'bg-zinc-300'
+                            }`}
+                          />
+                          <span
+                            className={
+                              item.estado === 'RECIBIDO'
+                                ? 'font-bold text-[#2E7D32]'
+                                : 'text-[#6B7A72]'
+                            }
+                          >
+                            3. Recibido
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Barra de acción con Segregación Estricta */}
                     <div className="mt-4 pt-3 border-t border-[#E7E5DF] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[12px]">
-                      <span className="text-[#6B7A72] font-mono text-[11px]">
-                        Emisor: {item.usuario_emisor?.nombre_completo || 'Administrador'}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[#6B7A72] font-mono text-[11px]">
+                          Emisor: {item.usuario_emisor?.nombre_completo || 'Administrador'}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setGuiaModalItem(item)}
+                          className="inline-flex items-center gap-1 text-[11px] font-medium text-[#16201C] hover:underline cursor-pointer"
+                        >
+                          <FileText size={12} />
+                          <span>Guía de Traslado</span>
+                        </button>
+                      </div>
 
                       {/* 1. ESTADO PENDIENTE */}
                       {item.estado === 'PENDIENTE' && (
@@ -770,6 +839,199 @@ export function ComunicacionSedesManager({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Guía de Traslado Inter-Sedes (Imprimible) */}
+      {guiaModalItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-[1px]"
+            onClick={() => setGuiaModalItem(null)}
+          />
+          <div className="relative w-full max-w-2xl bg-white rounded-[8px] shadow-2xl border border-[#E7E5DF] z-10 flex flex-col max-h-[90vh]">
+            <div className="p-4 border-b border-[#E7E5DF] flex items-center justify-between bg-[#FAFAF7]">
+              <div className="flex items-center gap-2">
+                <FileText size={16} className="text-[#16201C]" />
+                <h3 className="font-bold text-[#16201C] text-[15px]">
+                  Guía de Remisión / Traslado Interno
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="inline-flex items-center gap-1.5 px-3 py-1 rounded-[6px] bg-[#16201C] text-white text-[12px] font-medium hover:bg-[#2A3B34] cursor-pointer"
+                >
+                  <Printer size={13} />
+                  <span>Imprimir / PDF</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setGuiaModalItem(null)}
+                  className="p-1 rounded text-[#6B7A72] hover:text-[#16201C] hover:bg-[#E7E5DF] cursor-pointer"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-6 text-[#16201C]">
+              {/* Encabezado Formal Guía */}
+              <div className="flex items-start justify-between border-b border-[#E7E5DF] pb-4">
+                <div>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-[#6B7A72] block">
+                    Stockia WMS · Sistema de Gestión de Almacenes
+                  </span>
+                  <h2 className="text-[18px] font-bold text-[#16201C]">GUÍA DE REMISIÓN INTERNA</h2>
+                  <p className="text-[12px] text-[#6B7A72]">
+                    Documento de control y tránsito inter-establecimientos
+                  </p>
+                </div>
+                <div className="border border-[#16201C] p-3 rounded-[6px] text-center bg-[#FAFAF7] min-w-[180px]">
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-[#6B7A72] block">
+                    N° DE TRASLADO
+                  </span>
+                  <span className="font-mono font-bold text-[14px] text-[#16201C] block">
+                    GR-INT-{guiaModalItem.id.slice(0, 8).toUpperCase()}
+                  </span>
+                  <span
+                    className={`inline-block mt-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded ${
+                      guiaModalItem.estado === 'RECIBIDO'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : guiaModalItem.estado === 'EN_TRANSITO'
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                        : 'bg-amber-50 text-amber-700 border border-amber-200'
+                    }`}
+                  >
+                    {guiaModalItem.estado === 'RECIBIDO'
+                      ? 'CONFORME EN DESTINO'
+                      : guiaModalItem.estado === 'EN_TRANSITO'
+                      ? 'EN RUTA DE TRANSPORTE'
+                      : 'PENDIENTE DE DESPACHO'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Puntos de Partida y Llegada */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[12px]">
+                <div className="p-3 rounded-[6px] border border-[#E7E5DF] bg-[#FAFAF7] space-y-1">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-[#6B7A72] block font-semibold">
+                    1. PUNTO DE PARTIDA (DESPACHO)
+                  </span>
+                  <div className="font-bold text-[#16201C] text-[13px]">
+                    {guiaModalItem.sede_destino.nombre}
+                  </div>
+                  <div className="text-[#6B7A72]">
+                    {almacenes.find((a) => a.id === guiaModalItem.sede_destino.id)?.direccion ||
+                      'Dirección de sede registrada en el sistema'}
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-[6px] border border-[#E7E5DF] bg-[#FAFAF7] space-y-1">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-[#6B7A72] block font-semibold">
+                    2. PUNTO DE LLEGADA (SOLICITANTE)
+                  </span>
+                  <div className="font-bold text-[#16201C] text-[13px]">
+                    {guiaModalItem.sede_origen.nombre}
+                  </div>
+                  <div className="text-[#6B7A72]">
+                    {almacenes.find((a) => a.id === guiaModalItem.sede_origen.id)?.direccion ||
+                      'Dirección de sede registrada en el sistema'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Fechas y Motivo */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-[12px]">
+                <div className="p-2.5 rounded-[6px] border border-[#E7E5DF]">
+                  <span className="text-[#6B7A72] block text-[11px]">Fecha Emisión:</span>
+                  <span className="font-mono font-medium">
+                    {new Date(guiaModalItem.fecha_solicitud).toLocaleDateString('es-PE')}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-[6px] border border-[#E7E5DF]">
+                  <span className="text-[#6B7A72] block text-[11px]">Motivo del Traslado:</span>
+                  <span className="font-medium">Traslado entre locales</span>
+                </div>
+                <div className="p-2.5 rounded-[6px] border border-[#E7E5DF]">
+                  <span className="text-[#6B7A72] block text-[11px]">Prioridad de Carga:</span>
+                  <span className="font-mono font-semibold">{guiaModalItem.prioridad}</span>
+                </div>
+              </div>
+
+              {/* Tabla de Mercadería */}
+              <div className="border border-[#E7E5DF] rounded-[6px] overflow-hidden text-[12px]">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#E7E5DF] bg-[#FAFAF7] font-mono text-[11px] text-[#6B7A72]">
+                      <th className="py-2 px-3">Item</th>
+                      <th className="py-2 px-3">Código SKU</th>
+                      <th className="py-2 px-3">Descripción de Mercadería</th>
+                      <th className="py-2 px-3 text-center">Unidad</th>
+                      <th className="py-2 px-3 text-right">Cantidad</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {guiaModalItem.producto ? (
+                      <tr className="border-b border-[#E7E5DF]">
+                        <td className="py-2.5 px-3 font-mono text-[#6B7A72]">01</td>
+                        <td className="py-2.5 px-3 font-mono font-semibold">
+                          {guiaModalItem.producto.sku}
+                        </td>
+                        <td className="py-2.5 px-3 font-medium">
+                          {guiaModalItem.producto.nombre}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono">UND</td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-[13px]">
+                          {guiaModalItem.cantidad}
+                        </td>
+                      </tr>
+                    ) : (
+                      <tr>
+                        <td colSpan={5} className="py-3 px-3 text-center text-[#6B7A72] italic">
+                          Requerimiento operativo general: {guiaModalItem.mensaje}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Observación y Notas */}
+              {guiaModalItem.respuesta && (
+                <div className="p-3 rounded-[6px] bg-[#FAFAF7] border border-[#E7E5DF] text-[12px]">
+                  <span className="font-bold text-[#16201C] block mb-1">
+                    Notas de Despacho / Logística:
+                  </span>
+                  <p className="text-[#6B7A72]">{guiaModalItem.respuesta}</p>
+                </div>
+              )}
+
+              {/* Espacios de Firma */}
+              <div className="grid grid-cols-3 gap-4 pt-6 border-t border-[#E7E5DF] text-[11px] text-center">
+                <div className="space-y-2">
+                  <div className="border-b border-dashed border-[#16201C] h-10" />
+                  <span className="font-medium text-[#16201C] block">Despachador</span>
+                  <span className="text-[#6B7A72] text-[10px] block">
+                    Sede {guiaModalItem.sede_destino.nombre}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <div className="border-b border-dashed border-[#16201C] h-10" />
+                  <span className="font-medium text-[#16201C] block">Transportista / Conductor</span>
+                  <span className="text-[#6B7A72] text-[10px] block">DNI / Firma de Porte</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="border-b border-dashed border-[#16201C] h-10" />
+                  <span className="font-medium text-[#16201C] block">Recepción Conforme</span>
+                  <span className="text-[#6B7A72] text-[10px] block">
+                    Sede {guiaModalItem.sede_origen.nombre}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

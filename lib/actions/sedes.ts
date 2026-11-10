@@ -88,9 +88,92 @@ export async function responderSolicitudSedesAction(
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { success: false, error: 'Sesión no válida.' }
+  if (!user) return { success: false, error: 'Sesión no válida o expirada.' }
 
   const adminClient = createAdminClient()
+
+  // 1. Obtener la solicitud actual para conocer productos y sedes
+  const { data: sol, error: fetchErr } = await adminClient
+    .from('solicitud_traslado')
+    .select('id, negocio_id, sede_origen_id, sede_destino_id, producto_id, cantidad, estado')
+    .eq('id', validated.data.solicitud_id)
+    .single()
+
+  if (fetchErr || !sol) {
+    return { success: false, error: 'La solicitud de traslado no existe o fue eliminada.' }
+  }
+
+  // 2. Si pasa a EN_TRANSITO: descontar stock de la sede atendedora (destino de la solicitud)
+  if (validated.data.nuevo_estado === 'EN_TRANSITO') {
+    if (sol.estado !== 'PENDIENTE') {
+      return { success: false, error: 'Solo se pueden despachar requerimientos en estado PENDIENTE.' }
+    }
+
+    if (sol.producto_id && Number(sol.cantidad) > 0) {
+      const { error: rpcErr } = await adminClient.rpc('registrar_movimiento', {
+        p_negocio_id: sol.negocio_id,
+        p_usuario_id: user.id,
+        p_tipo: 'SALIDA',
+        p_motivo: `Despacho en tránsito inter-sedes (Guía #${sol.id.slice(0, 8).toUpperCase()})`,
+        p_almacen_origen_id: sol.sede_destino_id,
+        p_almacen_destino_id: null,
+        p_detalles: [
+          {
+            producto_id: sol.producto_id,
+            cantidad: Number(sol.cantidad),
+            costo_unitario: 0,
+          },
+        ],
+        p_referencia_tipo: 'SOLICITUD_TRASLADO',
+        p_referencia_id: sol.id,
+      })
+
+      if (rpcErr) {
+        console.error('[DESPACHO TRASLADO RPC ERROR]', rpcErr.message)
+        return {
+          success: false,
+          error: `No se pudo despachar el traslado: ${rpcErr.message}`,
+        }
+      }
+    }
+  }
+
+  // 3. Si pasa a RECIBIDO: ingresar stock a la sede solicitante (origen de la solicitud)
+  if (validated.data.nuevo_estado === 'RECIBIDO') {
+    if (sol.estado !== 'EN_TRANSITO') {
+      return { success: false, error: 'Solo se puede confirmar recepción de mercadería que esté EN TRÁNSITO.' }
+    }
+
+    if (sol.producto_id && Number(sol.cantidad) > 0) {
+      const { error: rpcErr } = await adminClient.rpc('registrar_movimiento', {
+        p_negocio_id: sol.negocio_id,
+        p_usuario_id: user.id,
+        p_tipo: 'ENTRADA',
+        p_motivo: `Recepción conforme de traslado inter-sedes (Guía #${sol.id.slice(0, 8).toUpperCase()})`,
+        p_almacen_origen_id: null,
+        p_almacen_destino_id: sol.sede_origen_id,
+        p_detalles: [
+          {
+            producto_id: sol.producto_id,
+            cantidad: Number(sol.cantidad),
+            costo_unitario: 0,
+          },
+        ],
+        p_referencia_tipo: 'SOLICITUD_TRASLADO',
+        p_referencia_id: sol.id,
+      })
+
+      if (rpcErr) {
+        console.error('[RECEPCION TRASLADO RPC ERROR]', rpcErr.message)
+        return {
+          success: false,
+          error: `No se pudo registrar el ingreso en destino: ${rpcErr.message}`,
+        }
+      }
+    }
+  }
+
+  // 4. Actualizar estado de la solicitud en la base de datos
   const { error } = await adminClient
     .from('solicitud_traslado')
     .update({
@@ -108,6 +191,9 @@ export async function responderSolicitudSedesAction(
   }
 
   revalidatePath('/admin/almacenes')
+  revalidatePath('/admin/inventario')
+  revalidatePath('/admin/movimientos')
+  revalidatePath('/admin/productos')
   return { success: true }
 }
 
