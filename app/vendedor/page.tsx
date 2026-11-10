@@ -6,21 +6,52 @@ export const dynamic = 'force-dynamic'
 export default async function VendedorPage() {
   const supabase = await createClient()
 
-  // Consultar sede asignada al vendedor
+  // Consultar sede asignada al colaborador y lista de almacenes disponibles
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  let sedeNombre: string | null = null
+
+  let usuario: {
+    rol: string
+    almacen_id: string | null
+    negocio_id: string
+    almacen?: { nombre: string; codigo: string | null } | { nombre: string; codigo: string | null }[] | null
+  } | null = null
 
   if (user) {
     const { data: perfil } = await supabase
       .from('usuarios')
-      .select('almacen_id, almacen:almacen_id(nombre, codigo)')
+      .select('rol, almacen_id, negocio_id, almacen:almacen_id(nombre, codigo)')
       .eq('id', user.id)
       .maybeSingle()
 
-    // @ts-expect-error Supabase nested join
-    sedeNombre = Array.isArray(perfil?.almacen) ? perfil.almacen[0]?.nombre : perfil?.almacen?.nombre
+    usuario = perfil
+  }
+
+  // Consultar almacenes activos de la empresa
+  const { data: almacenesDb } = await supabase
+    .from('almacen')
+    .select('id, nombre, es_principal')
+    .eq('activo', true)
+    .order('es_principal', { ascending: false })
+
+  const almacenes = almacenesDb || []
+  const initialAlmacenId =
+    usuario?.almacen_id || almacenes.find((a) => a.es_principal)?.id || almacenes[0]?.id || ''
+
+  // Consultar inventario real agrupado por producto y almacén
+  const { data: invRows } = await supabase
+    .from('inventario')
+    .select('almacen_id, producto_id, stock_actual')
+
+  const stockPorAlmacen: Record<string, Record<string, number>> = {}
+  if (invRows) {
+    for (const r of invRows) {
+      if (!stockPorAlmacen[r.producto_id]) {
+        stockPorAlmacen[r.producto_id] = {}
+      }
+      stockPorAlmacen[r.producto_id][r.almacen_id] = Number(r.stock_actual) || 0
+    }
   }
 
   // Consultar productos activos iniciales
@@ -45,7 +76,7 @@ export default async function VendedorPage() {
     codigo_barras: p.codigo_barras,
     nombre: p.nombre,
     precio: Number(p.precio_soles) || 0,
-    stock: Number(p.stock) || 0,
+    stock: stockPorAlmacen[p.id]?.[initialAlmacenId] ?? 0,
     // @ts-expect-error Supabase nested
     unidad: p.unidad_medida?.codigo || 'UND',
   }))
@@ -53,6 +84,10 @@ export default async function VendedorPage() {
   const hasCulqiConfigured = Boolean(
     process.env.NEXT_PUBLIC_CULQI_PUBLIC_KEY && process.env.CULQI_SECRET_KEY
   )
+
+  const sedeNombre = Array.isArray(usuario?.almacen)
+    ? usuario.almacen[0]?.nombre
+    : usuario?.almacen?.nombre || almacenes.find((a) => a.id === initialAlmacenId)?.nombre || null
 
   return (
     <div className="space-y-6">
@@ -62,29 +97,24 @@ export default async function VendedorPage() {
             <h1 className="text-[28px] font-bold tracking-tight text-[#16201C] leading-[1.15]">
               Punto de Venta y Mostrador
             </h1>
-            {sedeNombre ? (
-              <p className="text-[12px] font-medium text-[#2E7D32] mt-0.5">
-                Despachando desde: <strong>{sedeNombre}</strong>
-              </p>
-            ) : (
-              <p className="text-[12px] text-[#6B7A72] mt-0.5">
-                Despachando desde: <strong>Sede Central (Principal)</strong>
-              </p>
-            )}
+            <p className="text-[12px] text-[#6B7A72] mt-0.5">
+              Control de emisión de comprobantes, cobro multicanal y salida automática de stock en sede.
+            </p>
           </div>
           <span className="font-mono text-[12px] text-[#6B7A72]">
             Serie Activa: <span className="font-bold text-[#16201C]">B001</span>
           </span>
         </div>
-        <p className="text-[13px] text-[#6B7A72] mt-1">
-          Emisión de comprobantes, cobro multicanal con Culqi/Efectivo y salida automática de stock.
-        </p>
       </div>
 
       <PuntoDeVenta
         hasCulqiConfigured={hasCulqiConfigured}
         initialProductos={items}
         sedeNombre={sedeNombre}
+        almacenes={almacenes}
+        stockPorAlmacen={stockPorAlmacen}
+        initialAlmacenId={initialAlmacenId}
+        esAdmin={usuario?.rol === 'admin'}
       />
     </div>
   )

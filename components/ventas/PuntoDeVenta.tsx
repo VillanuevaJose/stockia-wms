@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect, useRef, useCallback } from 'react'
+import { useState, useTransition, useEffect, useRef, useCallback, useMemo } from 'react'
 import {
   Search,
   ShoppingCart,
@@ -43,13 +43,23 @@ interface Props {
   hasCulqiConfigured?: boolean
   initialProductos?: ProductoItem[]
   sedeNombre?: string | null
+  almacenes?: { id: string; nombre: string; es_principal: boolean }[]
+  stockPorAlmacen?: Record<string, Record<string, number>>
+  initialAlmacenId?: string
+  esAdmin?: boolean
 }
 
 export function PuntoDeVenta({
   hasCulqiConfigured = false,
   initialProductos = [],
   sedeNombre = null,
+  almacenes = [],
+  stockPorAlmacen,
+  initialAlmacenId = '',
 }: Props) {
+  const [selectedAlmacenId, setSelectedAlmacenId] = useState<string>(
+    initialAlmacenId || almacenes[0]?.id || ''
+  )
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<ProductoItem[]>([])
   const [carrito, setCarrito] = useState<CartItem[]>([])
@@ -76,7 +86,34 @@ export function PuntoDeVenta({
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [ventaExitosa, setVentaExitosa] = useState<(VentaResult & { vuelto?: number }) | null>(null)
 
-  const catalogo = query.trim() ? searchResults : initialProductos
+  // Catálogo dinámico reflejando el stock exacto de la sede seleccionada
+  const catalogo = useMemo(() => {
+    const baseList = query.trim() ? searchResults : initialProductos
+    if (!stockPorAlmacen || !selectedAlmacenId) return baseList
+
+    return baseList.map((p) => {
+      const realStock = stockPorAlmacen[p.id]?.[selectedAlmacenId] ?? 0
+      return {
+        ...p,
+        stock: realStock,
+      }
+    })
+  }, [query, searchResults, initialProductos, stockPorAlmacen, selectedAlmacenId])
+
+  const handleSedeChange = (nuevoId: string) => {
+    if (carrito.length > 0) {
+      if (
+        !confirm(
+          'Al cambiar de sede se reiniciará el carrito actual para verificar existencias en el nuevo local. ¿Deseas continuar?'
+        )
+      ) {
+        return
+      }
+      setCarrito([])
+    }
+    setSelectedAlmacenId(nuevoId)
+    setErrorMsg(null)
+  }
 
   // Bip de confirmación de escaneo (Web Audio API)
   const playBeep = () => {
@@ -106,13 +143,13 @@ export function PuntoDeVenta({
 
     const timer = setTimeout(() => {
       startSearch(async () => {
-        const resultados = await buscarProductosParaVentaAction(query)
+        const resultados = await buscarProductosParaVentaAction(query, selectedAlmacenId)
         setSearchResults(resultados)
       })
     }, 250)
 
     return () => clearTimeout(timer)
-  }, [query])
+  }, [query, selectedAlmacenId])
 
   const agregarAlCarrito = (prod: ProductoItem) => {
     setErrorMsg(null)
@@ -148,7 +185,7 @@ export function PuntoDeVenta({
 
     // 2. Si no está en memoria, consultar al servidor
     if (!encontrado) {
-      const dbResult = await buscarProductosParaVentaAction(codigo.trim())
+      const dbResult = await buscarProductosParaVentaAction(codigo.trim(), selectedAlmacenId)
       encontrado = dbResult.find(
         (p) =>
           p.codigo_barras?.toLowerCase() === clean ||
@@ -167,7 +204,7 @@ export function PuntoDeVenta({
     } else {
       setErrorMsg(`Código de barras "${codigo}" no encontrado en existencias de esta sede.`)
     }
-  }, [catalogo])
+  }, [catalogo, selectedAlmacenId])
 
   // ===== 1. LECTOR DE PISTOLA DE CÓDIGO DE BARRAS GLOBAL =====
   useEffect(() => {
@@ -330,6 +367,7 @@ export function PuntoDeVenta({
         metodoPago === 'CULQI' ? `chr_test_${Date.now().toString().slice(-8)}` : undefined
 
       const res = await registrarVentaAction({
+        almacen_id: selectedAlmacenId || undefined,
         metodo_pago: metodoPago,
         items: carrito.map((i) => ({ producto_id: i.id, cantidad: i.cantidad })),
         culqi_charge_id: culqiChargeId,
@@ -406,10 +444,27 @@ export function PuntoDeVenta({
           <span className="hidden sm:inline-block text-[11px] text-[#6B7A72] font-mono bg-[#FAFAF7] px-2 py-0.5 rounded border border-[#E7E5DF]">
             Pistola USB / Bluetooth lista
           </span>
-          {sedeNombre && (
-            <span className="hidden md:inline-block text-[11px] text-[#2E7D32] bg-[#E8F5E9] font-medium px-2 py-0.5 rounded border border-[#C8E6C9]">
-              {sedeNombre}
-            </span>
+          {almacenes && almacenes.length > 1 ? (
+            <div className="flex items-center gap-1.5 bg-[#E8F5E9] px-2.5 py-1 rounded-[6px] border border-[#C8E6C9] text-[12px]">
+              <span className="text-[#2E7D32] font-semibold whitespace-nowrap">Sede:</span>
+              <select
+                value={selectedAlmacenId}
+                onChange={(e) => handleSedeChange(e.target.value)}
+                className="bg-transparent font-bold text-[#1B5E20] focus:outline-none cursor-pointer text-[12px]"
+              >
+                {almacenes.map((a) => (
+                  <option key={a.id} value={a.id} className="text-[#16201C] bg-white">
+                    {a.nombre} {a.es_principal ? '(Principal)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            (sedeNombre || almacenes[0]?.nombre) && (
+              <span className="hidden md:inline-block text-[11px] text-[#2E7D32] bg-[#E8F5E9] font-medium px-2 py-0.5 rounded border border-[#C8E6C9]">
+                {sedeNombre || almacenes[0]?.nombre}
+              </span>
+            )
           )}
         </div>
 

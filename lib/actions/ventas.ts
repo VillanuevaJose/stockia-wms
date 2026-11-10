@@ -144,7 +144,7 @@ export async function registrarVentaAction(
 /**
  * Búsqueda de productos en tiempo real para el punto de venta
  */
-export async function buscarProductosParaVentaAction(termino: string) {
+export async function buscarProductosParaVentaAction(termino: string, almacenId?: string) {
   const supabase = await createClient()
   const clean = termino.trim()
   if (!clean) return []
@@ -166,13 +166,31 @@ export async function buscarProductosParaVentaAction(termino: string) {
 
   if (error || !data) return []
 
+  let stockMap: Record<string, number> = {}
+  if (almacenId && data.length > 0) {
+    const { data: invRows } = await supabase
+      .from('inventario')
+      .select('producto_id, stock_actual')
+      .eq('almacen_id', almacenId)
+      .in(
+        'producto_id',
+        data.map((p) => p.id)
+      )
+
+    if (invRows) {
+      stockMap = Object.fromEntries(
+        invRows.map((r) => [r.producto_id, Number(r.stock_actual) || 0])
+      )
+    }
+  }
+
   return data.map((p) => ({
     id: p.id,
     sku: p.sku,
     codigo_barras: p.codigo_barras,
     nombre: p.nombre,
     precio: Number(p.precio_soles) || 0,
-    stock: Number(p.stock) || 0,
+    stock: almacenId ? stockMap[p.id] ?? 0 : Number(p.stock) || 0,
     // @ts-expect-error Supabase nested
     unidad: p.unidad_medida?.codigo || 'UND',
   }))
