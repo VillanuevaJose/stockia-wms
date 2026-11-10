@@ -15,3 +15,4 @@
 - Corrección catálogo maestro: Alineación de columna temporal de productos a created_at y consolidación robusta de existencias con inventario físico.
 - Generación Excel (.xlsx) nativa: Motor OpenXML propio con gráficos DrawingML, fórmulas SUM/SUMIF, KPIs y estilos editoriales sin librerías externas pesadas.
 - Onboarding B2B e invitaciones: Delegación de invitaciones vía Supabase Auth al Admin de empresa, bloqueo inmediato en auth.users y registro exclusivo de tenants en /registro.
+- Conteo físico y auditoría de mermas: Drawer de toma de inventario con balance en Soles y ajuste atómico en PostgreSQL vía registrar_movimiento.

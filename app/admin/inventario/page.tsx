@@ -1,11 +1,21 @@
 import Link from 'next/link'
 import { getInventarioFisico } from '../../../lib/queries/operaciones'
+import { createClient } from '../../../lib/supabase/server'
 import { Boxes, Plus } from '../../../components/ui/icons'
+import { ConteoFisicoDrawer } from '../../../components/inventario/ConteoFisicoDrawer'
 
 export const dynamic = 'force-dynamic'
 
 export default async function InventarioPage() {
-  const { inventario, totales } = await getInventarioFisico()
+  const supabase = await createClient()
+  const [{ inventario, totales }, { data: almacenes }] = await Promise.all([
+    getInventarioFisico(),
+    supabase
+      .from('almacen')
+      .select('id, nombre, es_principal')
+      .eq('activo', true)
+      .order('es_principal', { ascending: false }),
+  ])
 
   const semaforoStock = (estado: string) => {
     switch (estado) {
@@ -33,6 +43,7 @@ export default async function InventarioPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <ConteoFisicoDrawer inventario={inventario} almacenes={almacenes || []} />
             <a
               href="/api/reportes/inventario?format=xlsx"
               download
