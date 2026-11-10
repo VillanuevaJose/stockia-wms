@@ -65,6 +65,9 @@ export default async function RegistroPage() {
 
         {/* Tarjeta de Formulario */}
         <div className="bg-white rounded-[8px] border border-[#ebebeb] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-6 sm:p-7">
+          <div className="mb-4 p-2.5 rounded-[6px] bg-[#FAFAF7] border border-[#E7E5DF] text-[11px] text-[#6B7A72] leading-relaxed">
+            <b className="text-[#16201C] font-semibold">¿Eres colaborador o empleado?</b> No es necesario registrarte aquí. Tu administrador debe enviarte una invitación a tu correo.
+          </div>
           <RegistroForm />
         </div>
 

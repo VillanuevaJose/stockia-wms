@@ -100,7 +100,7 @@ export function UsuariosManager({ usuarios, almacenes = [], currentUserId }: Pro
       {/* Barra de acciones superior */}
       <div className="flex items-center justify-between gap-3">
         <p className="text-[13px] text-[#6B7A72]">
-          Control de acceso multi-sede basado en roles (RBAC). Las cuentas auto-registradas inician como colaborador básico sin sede asignada.
+          Gestión de equipo y sedes (RBAC). Invita a tus colaboradores por correo corporativo o personal para que activen su acceso a la sede asignada.
         </p>
 
         <button
@@ -113,7 +113,7 @@ export function UsuariosManager({ usuarios, almacenes = [], currentUserId }: Pro
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-[#16201C] hover:bg-[#2A3B34] text-white text-[13px] font-medium transition-colors cursor-pointer"
         >
           <Plus size={14} />
-          <span>Nuevo Colaborador</span>
+          <span>Invitar Colaborador</span>
         </button>
       </div>
 
@@ -358,9 +358,9 @@ export function UsuariosManager({ usuarios, almacenes = [], currentUserId }: Pro
             <div>
               <div className="flex items-center justify-between pb-4 border-b border-[#E7E5DF]">
                 <div>
-                  <h2 className="text-[16px] font-bold text-[#16201C]">Crear Colaborador</h2>
+                  <h2 className="text-[16px] font-bold text-[#16201C]">Invitar Colaborador</h2>
                   <p className="text-[12px] text-[#6B7A72]">
-                    Asigna credenciales, rol operativo y sede inicial al nuevo usuario.
+                    El colaborador recibirá un correo con el enlace para crear su contraseña y acceder a su sede.
                   </p>
                 </div>
                 <button
@@ -402,7 +402,7 @@ export function UsuariosManager({ usuarios, almacenes = [], currentUserId }: Pro
 
                 <div>
                   <label className="block text-[12px] font-medium text-[#16201C] mb-1">
-                    Correo Institucional
+                    Correo del Colaborador
                   </label>
                   <input
                     name="email"
@@ -442,7 +442,7 @@ export function UsuariosManager({ usuarios, almacenes = [], currentUserId }: Pro
 
                 <div>
                   <label className="block text-[12px] font-medium text-[#16201C] mb-1">
-                    Sede Operativa
+                    Sede Operativa Asignada
                   </label>
                   <select
                     name="almacen_id"
@@ -458,26 +458,28 @@ export function UsuariosManager({ usuarios, almacenes = [], currentUserId }: Pro
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-[12px] font-medium text-[#16201C] mb-1">
-                    Contraseña Temporal
-                  </label>
+                <div className="pt-2 border-t border-[#E7E5DF]/70">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[12px] font-medium text-[#16201C]">
+                      Contraseña Provisional (Opcional)
+                    </label>
+                    <span className="text-[11px] text-[#6B7A72]">
+                      Vacío = Envío de invitación
+                    </span>
+                  </div>
                   <input
                     name="password"
                     type="password"
-                    autoComplete="one-time-code"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    data-lpignore="true"
-                    data-1p-ignore="true"
-                    data-bwignore="true"
-                    required
-                    placeholder="Mínimo 6 caracteres"
+                    autoComplete="new-password"
+                    placeholder="Dejar vacío para invitar por correo (recomendado)"
                     className="w-full rounded-[6px] border border-[#E7E5DF] px-3 py-1.5 text-[13px] text-[#16201C] focus:outline-none focus:border-[#16201C]"
                   />
                   {fieldErrors.password && (
                     <p className="text-[11px] text-[#D32F2F] mt-1">{fieldErrors.password}</p>
                   )}
+                  <p className="text-[11px] text-[#6B7A72] mt-1 leading-relaxed">
+                    Si se deja vacío, el sistema enviará un correo con el token seguro para que el colaborador cree su propia contraseña.
+                  </p>
                 </div>
               </form>
             </div>
@@ -497,7 +499,7 @@ export function UsuariosManager({ usuarios, almacenes = [], currentUserId }: Pro
                 className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-[6px] bg-[#16201C] hover:bg-[#2A3B34] text-white text-[13px] font-medium disabled:opacity-50"
               >
                 {isPendingCreate && <Loader2 size={13} className="animate-spin" />}
-                <span>Crear Colaborador</span>
+                <span>Enviar Invitación / Guardar</span>
               </button>
             </div>
           </div>

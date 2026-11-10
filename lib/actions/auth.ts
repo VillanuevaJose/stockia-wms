@@ -60,15 +60,24 @@ export async function iniciarSesionAction(
     }
   }
 
-  // Direccionar al usuario según su rol asignado
+  // Direccionar al usuario según su rol asignado y verificar si está activo
   const { data: userAuth } = await supabase.auth.getUser()
   let targetPath = '/admin'
   if (userAuth?.user?.id) {
     const { data: perfil } = await supabase
       .from('usuarios')
-      .select('rol')
+      .select('rol, activo')
       .eq('id', userAuth.user.id)
       .single()
+
+    if (perfil && perfil.activo === false) {
+      await supabase.auth.signOut()
+      return {
+        success: false,
+        error: 'Tu cuenta ha sido desactivada por el administrador de tu empresa.',
+      }
+    }
+
     if (perfil?.rol === 'vendedor') targetPath = '/vendedor'
     else if (perfil?.rol === 'almacenero') targetPath = '/almacenero'
   }
@@ -144,57 +153,41 @@ export async function registrarUsuarioAction(
     }
   }
 
-  // Vincular a la empresa principal activa como colaborador sin sede asignada
+  // Cada nuevo registro crea su propia Empresa/Tenant y su cuenta de Administrador
   if (data.user?.id) {
     try {
       const adminClient = createAdminClient()
 
-      const { data: mainNegocio } = await adminClient
-        .from('negocio')
-        .select('id, nombre')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .single()
+      const { error: rpcErr } = await adminClient.rpc('registrar_negocio_y_admin', {
+        p_nombre_negocio: validated.data.nombre_negocio,
+        p_ruc: validated.data.ruc || null,
+        p_nombre_completo: validated.data.nombre_completo,
+        p_user_id: data.user.id,
+      })
 
-      if (mainNegocio) {
-        // Asignar al negocio existente con rol básico (vendedor) y sin sede asignada
-        await adminClient.from('usuarios').upsert({
-          id: data.user.id,
-          negocio_id: mainNegocio.id,
-          email: validated.data.email,
-          nombre_completo: validated.data.nombre_completo,
-          rol: 'vendedor',
-          almacen_id: null,
-          activo: true,
-        })
-
-        await adminClient.auth.admin.updateUserById(data.user.id, {
-          email_confirm: true,
-          user_metadata: {
-            nombre_completo: validated.data.nombre_completo,
-            rol: 'vendedor',
-            almacen_id: null,
-            negocio_id: mainNegocio.id,
-          },
-        })
-      } else {
-        await adminClient.rpc('registrar_negocio_y_admin', {
-          p_nombre_negocio: validated.data.nombre_negocio,
-          p_ruc: validated.data.ruc || null,
-          p_nombre_completo: validated.data.nombre_completo,
-          p_user_id: data.user.id,
-        })
-        await adminClient.auth.admin.updateUserById(data.user.id, {
-          email_confirm: true,
-        })
+      if (rpcErr) {
+        console.error('[REGISTRO RPC ERROR]', rpcErr)
+        return {
+          success: false,
+          error: 'Error al registrar la empresa: ' + rpcErr.message,
+        }
       }
+
+      await adminClient.auth.admin.updateUserById(data.user.id, {
+        email_confirm: true,
+        user_metadata: {
+          nombre_completo: validated.data.nombre_completo,
+          rol: 'admin',
+          nombre_negocio: validated.data.nombre_negocio,
+        },
+      })
 
       invalidateFastCache('usuarios')
     } catch (dbErr) {
       console.error('[REGISTRO SERVER EXCEPTION]', dbErr)
       return {
         success: false,
-        error: 'Error interno en la configuración inicial del usuario.',
+        error: 'Error interno en la configuración inicial de la empresa.',
       }
     }
   }

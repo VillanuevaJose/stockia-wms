@@ -19,7 +19,10 @@ const crearUsuarioSchema = z.object({
     .email('Ingresa un correo institucional válido'),
   password: z
     .string()
-    .min(6, 'La contraseña temporal debe tener al menos 6 caracteres'),
+    .optional()
+    .refine((val) => !val || val.trim().length === 0 || val.length >= 6, {
+      message: 'La contraseña debe tener al menos 6 caracteres',
+    }),
   rol: z.enum(['admin', 'almacenero', 'vendedor'], {
     message: 'El rol debe ser admin, almacenero o vendedor',
   }),
@@ -30,6 +33,7 @@ export type CrearUsuarioState = {
   success?: boolean
   error?: string
   fieldErrors?: Record<string, string>
+  invited?: boolean
 }
 
 export async function crearUsuarioAction(
@@ -37,10 +41,12 @@ export async function crearUsuarioAction(
   formData: FormData
 ): Promise<CrearUsuarioState> {
   const rawAlmacenId = formData.get('almacen_id')
+  const rawPassword = formData.get('password') ? String(formData.get('password')).trim() : ''
+
   const rawData = {
     nombre_completo: formData.get('nombre_completo'),
     email: formData.get('email'),
-    password: formData.get('password'),
+    password: rawPassword || undefined,
     rol: formData.get('rol'),
     almacen_id: rawAlmacenId && rawAlmacenId !== 'none' ? String(rawAlmacenId) : null,
   }
@@ -78,30 +84,56 @@ export async function crearUsuarioAction(
   }
 
   const adminClient = createAdminClient()
+  let newUserId = ''
+  const isInvite = !rawPassword
 
-  // 2. Crear usuario en Supabase Auth mediante API de administración segura
-  const { data: newUserAuth, error: createAuthErr } = await adminClient.auth.admin.createUser({
-    email: validated.data.email,
-    password: validated.data.password,
-    email_confirm: true,
-    user_metadata: {
-      nombre_completo: validated.data.nombre_completo,
-      rol: validated.data.rol,
-      almacen_id: validated.data.almacen_id || null,
-      negocio_id: callerUser.negocio_id,
-    },
-  })
+  if (isInvite) {
+    // Modo Invitación por Correo Oficial (Supabase Auth)
+    const { data: inviteAuth, error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(
+      validated.data.email,
+      {
+        data: {
+          nombre_completo: validated.data.nombre_completo,
+          rol: validated.data.rol,
+          almacen_id: validated.data.almacen_id || null,
+          negocio_id: callerUser.negocio_id,
+        },
+      }
+    )
 
-  if (createAuthErr || !newUserAuth.user) {
-    return {
-      success: false,
-      error: createAuthErr?.message || 'No se pudo crear el usuario en el sistema de autenticación.',
+    if (inviteErr || !inviteAuth.user) {
+      return {
+        success: false,
+        error: inviteErr?.message || 'No se pudo enviar la invitación por correo.',
+      }
     }
+    newUserId = inviteAuth.user.id
+  } else {
+    // Modo Provisión Manual Directa con Contraseña
+    const { data: newUserAuth, error: createAuthErr } = await adminClient.auth.admin.createUser({
+      email: validated.data.email,
+      password: rawPassword,
+      email_confirm: true,
+      user_metadata: {
+        nombre_completo: validated.data.nombre_completo,
+        rol: validated.data.rol,
+        almacen_id: validated.data.almacen_id || null,
+        negocio_id: callerUser.negocio_id,
+      },
+    })
+
+    if (createAuthErr || !newUserAuth.user) {
+      return {
+        success: false,
+        error: createAuthErr?.message || 'No se pudo crear el usuario en el sistema de autenticación.',
+      }
+    }
+    newUserId = newUserAuth.user.id
   }
 
   // 3. Insertar o actualizar registro en public.usuarios con el negocio_id del admin
   const userData: Record<string, unknown> = {
-    id: newUserAuth.user.id,
+    id: newUserId,
     negocio_id: callerUser.negocio_id,
     email: validated.data.email,
     nombre_completo: validated.data.nombre_completo,
@@ -116,23 +148,22 @@ export async function crearUsuarioAction(
   let { error: insertErr } = await adminClient.from('usuarios').upsert(userData)
 
   if (insertErr && insertErr.message.includes('almacen_id')) {
-    // Si aún no se ha ejecutado el SQL de almacen_id, reintentar sin esa columna
     delete userData.almacen_id
     const fallbackRes = await adminClient.from('usuarios').upsert(userData)
     insertErr = fallbackRes.error
   }
 
   if (insertErr) {
-    await adminClient.auth.admin.deleteUser(newUserAuth.user.id)
+    await adminClient.auth.admin.deleteUser(newUserId)
     return {
       success: false,
-      error: 'Error al registrar el perfil del colaborador en la base de datos: ' + insertErr.message,
+      error: 'Error al registrar el perfil del colaborador: ' + insertErr.message,
     }
   }
 
   invalidateFastCache('usuarios')
   revalidatePath('/admin/usuarios')
-  return { success: true }
+  return { success: true, invited: isInvite }
 }
 
 export async function toggleUsuarioActivoAction(usuarioId: string, nuevoEstado: boolean) {
@@ -171,6 +202,15 @@ export async function toggleUsuarioActivoAction(usuarioId: string, nuevoEstado: 
 
   if (error) {
     return { success: false, error: error.message }
+  }
+
+  // Revocar o restaurar acceso en Supabase Auth de forma inmediata
+  try {
+    await adminClient.auth.admin.updateUserById(usuarioId, {
+      ban_duration: nuevoEstado ? 'none' : '876000h',
+    })
+  } catch (banErr) {
+    console.warn('[AUTH BAN SYNC NOTICE]', banErr)
   }
 
   invalidateFastCache('usuarios')

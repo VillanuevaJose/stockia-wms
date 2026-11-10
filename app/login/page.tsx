@@ -11,13 +11,20 @@ export const metadata: Metadata = {
   description: 'Iniciar sesión en Stockia - Sistema de Gestión de Almacenes e Inventario.',
 }
 
-export default async function LoginPage() {
+interface LoginPageProps {
+  searchParams?: Promise<{ error?: string }>
+}
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
   const cookieStore = await cookies()
   const fastUser = parseFastAuthUser(cookieStore.getAll())
 
   if (fastUser) {
     redirect('/admin')
   }
+
+  const params = await searchParams
+  const isDesactivado = params?.error === 'desactivado'
 
   return (
     <main className="min-h-screen bg-[#fafafa] flex flex-col justify-between items-center px-4 py-8 sm:py-12">
@@ -65,6 +72,11 @@ export default async function LoginPage() {
 
         {/* Tarjeta de Formulario */}
         <div className="bg-white rounded-[8px] border border-[#ebebeb] shadow-[0_1px_2px_rgba(0,0,0,0.04)] p-6 sm:p-7">
+          {isDesactivado && (
+            <div className="mb-4 p-3 rounded-[6px] bg-[#FFF5F5] border border-[#FFD6D6] text-[12px] text-[#C53030]">
+              Tu cuenta ha sido desactivada por el administrador de tu empresa.
+            </div>
+          )}
           <LoginForm />
         </div>
 
