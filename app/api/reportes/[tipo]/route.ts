@@ -181,7 +181,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         subtotal,
         impuesto,
         total,
-        cliente:cliente_id (nombre),
+        cliente:cliente_id (nombre_o_razon_social),
         usuario:usuario_id (nombre_completo)
       `)
       .eq('negocio_id', negocio_id)
@@ -214,7 +214,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       rows.push([
         numComp,
         new Date(v.fecha_emision).toLocaleString('es-PE'),
-        `"${v.cliente?.nombre || 'Público General'}"`,
+        `"${v.cliente?.nombre_o_razon_social || v.cliente?.nombre || 'Público General'}"`,
         `"${v.usuario?.nombre_completo || 'Vendedor'}"`,
         v.estado,
         Number(v.subtotal).toFixed(2),

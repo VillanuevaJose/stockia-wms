@@ -23,7 +23,7 @@ export interface VentaReporte {
   subtotal: number | string
   impuesto: number | string
   total: number | string
-  cliente?: { nombre?: string } | null
+  cliente?: { nombre?: string; nombre_o_razon_social?: string } | null
   usuario?: { nombre_completo?: string } | null
 }
 
@@ -300,7 +300,7 @@ export function generarExcelVentas(ventas: VentaReporte[], bizName = 'Stockia WM
     const rr = 3 + i
     const comp = `${v.serie}-${String(v.correlativo).padStart(8, '0')}`
     const fecha = new Date(v.fecha_emision).toLocaleString('es-PE')
-    const cliente = v.cliente?.nombre || 'Público General'
+    const cliente = v.cliente?.nombre_o_razon_social || v.cliente?.nombre || 'Público General'
     const vendedor = v.usuario?.nombre_completo || 'Vendedor'
     const isAnulada = v.estado === 'ANULADA'
     const isPendiente = v.estado === 'PENDIENTE'

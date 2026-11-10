@@ -206,15 +206,16 @@ export async function getVentasList(): Promise<VentaRow[]> {
       .from('venta')
       .select(`
         id,
-        numero_comprobante,
+        serie,
+        correlativo,
         total,
         estado,
         created_at,
-        cliente:cliente_id (nombre),
+        cliente:cliente_id (nombre_o_razon_social),
         usuario:usuario_id (nombre_completo)
       `)
       .order('created_at', { ascending: false })
-      .limit(20)
+      .limit(50)
 
     if (!ventas || ventas.length === 0) {
       return []
@@ -222,19 +223,24 @@ export async function getVentasList(): Promise<VentaRow[]> {
 
     interface RawVentaDb {
       id: string
-      numero_comprobante: string
+      serie: string
+      correlativo: number
       total: number
       estado: string
       created_at: string
-      cliente?: { nombre?: string } | { nombre?: string }[]
+      cliente?: { nombre_o_razon_social?: string } | { nombre_o_razon_social?: string }[]
       usuario?: { nombre_completo?: string } | { nombre_completo?: string }[]
     }
 
     return (ventas as unknown as RawVentaDb[]).map((v) => ({
       id: v.id,
-      numero_comprobante: v.numero_comprobante,
-      cliente_nombre: Array.isArray(v.cliente) ? v.cliente[0]?.nombre || 'Cliente General' : v.cliente?.nombre || 'Cliente General',
-      vendedor_nombre: Array.isArray(v.usuario) ? v.usuario[0]?.nombre_completo || 'Vendedor' : v.usuario?.nombre_completo || 'Vendedor',
+      numero_comprobante: `${v.serie}-${String(v.correlativo).padStart(8, '0')}`,
+      cliente_nombre: Array.isArray(v.cliente)
+        ? v.cliente[0]?.nombre_o_razon_social || 'Cliente General'
+        : v.cliente?.nombre_o_razon_social || 'Cliente General',
+      vendedor_nombre: Array.isArray(v.usuario)
+        ? v.usuario[0]?.nombre_completo || 'Vendedor'
+        : v.usuario?.nombre_completo || 'Vendedor',
       total: Number(v.total) || 0,
       estado: v.estado as VentaRow['estado'],
       fecha: v.created_at,
@@ -263,15 +269,15 @@ export async function getComprasList(): Promise<CompraRow[]> {
       .from('compra')
       .select(`
         id,
-        numero_factura,
+        numero_comprobante,
         total,
         estado,
         created_at,
-        proveedor:proveedor_id (nombre),
+        proveedor:proveedor_id (razon_social),
         usuario:usuario_id (nombre_completo)
       `)
       .order('created_at', { ascending: false })
-      .limit(20)
+      .limit(50)
 
     if (!compras || compras.length === 0) {
       return []
@@ -279,19 +285,23 @@ export async function getComprasList(): Promise<CompraRow[]> {
 
     interface RawCompraDb {
       id: string
-      numero_factura: string
+      numero_comprobante: string
       total: number
       estado: string
       created_at: string
-      proveedor?: { nombre?: string } | { nombre?: string }[]
+      proveedor?: { razon_social?: string } | { razon_social?: string }[]
       usuario?: { nombre_completo?: string } | { nombre_completo?: string }[]
     }
 
     return (compras as unknown as RawCompraDb[]).map((c) => ({
       id: c.id,
-      numero_factura: c.numero_factura,
-      proveedor_nombre: Array.isArray(c.proveedor) ? c.proveedor[0]?.nombre || 'Proveedor Oficial' : c.proveedor?.nombre || 'Proveedor Oficial',
-      solicitante_nombre: Array.isArray(c.usuario) ? c.usuario[0]?.nombre_completo || 'Encargado' : c.usuario?.nombre_completo || 'Encargado',
+      numero_factura: c.numero_comprobante,
+      proveedor_nombre: Array.isArray(c.proveedor)
+        ? c.proveedor[0]?.razon_social || 'Proveedor Oficial'
+        : c.proveedor?.razon_social || 'Proveedor Oficial',
+      solicitante_nombre: Array.isArray(c.usuario)
+        ? c.usuario[0]?.nombre_completo || 'Encargado'
+        : c.usuario?.nombre_completo || 'Encargado',
       total: Number(c.total) || 0,
       estado: c.estado as CompraRow['estado'],
       fecha: c.created_at,

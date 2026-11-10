@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createClient } from '../supabase/server'
 import { createAdminClient } from '../supabase/admin'
+import { invalidateFastCache } from '../cache/fast-cache'
 
 const itemVentaSchema = z.object({
   producto_id: z.string().uuid(),
@@ -213,6 +214,8 @@ export async function registrarVentaAction(
         referencia_externa: validated.data.culqi_charge_id || `Pago de ${numComprobante}`,
       })
 
+      invalidateFastCache('ventas')
+      invalidateFastCache('inventario')
       revalidatePath('/vendedor')
       revalidatePath('/admin/ventas')
       revalidatePath('/admin/inventario')
@@ -230,6 +233,8 @@ export async function registrarVentaAction(
     return { success: false, error: rpcErr.message }
   }
 
+  invalidateFastCache('ventas')
+  invalidateFastCache('inventario')
   revalidatePath('/vendedor')
   revalidatePath('/admin/ventas')
   revalidatePath('/admin/inventario')
