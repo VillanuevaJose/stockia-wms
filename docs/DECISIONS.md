@@ -20,3 +20,4 @@
 - Guía de Traslado inter-sedes: Despacho en origen (SALIDA), custodia en ruta, recepción en destino (ENTRADA) y Guía de Remisión interna imprimible.
 - Seguridad de cabeceras HTTP: Inyección de cabeceras OWASP en next.config.ts (HSTS preload, DENY frame, nosniff, sandboxing de permisos de dispositivos).
 - Gestor interactivo de comprobantes (/admin/ventas): Dashboard de KPIs, filtrado dinámico por cliente/vendedor/estado y visor/reimpresión de ticket térmico 80mm.
+- Kardex Valorizado SUNAT 13.1 (/admin/movimientos?tab=sunat-13-1): Libro tributario oficial de inventarios con Costo Promedio Ponderado (CPP), catálogo 10/12 de comprobantes e impresión legal.
