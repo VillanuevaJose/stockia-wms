@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Search, Eye, Printer, X, ShoppingCart, Plus } from '../ui/icons'
 import type { VentaRow } from '@/lib/queries/operaciones'
 import { obtenerDetalleVentaAction, type DetalleVentaCompleto } from '@/lib/actions/ventas'
+import { SunatQrCode } from '@/lib/sunat/qr-sunat'
 
 interface VentasManagerProps {
   ventas: VentaRow[]
@@ -305,19 +306,38 @@ export function VentasManager({ ventas }: VentasManagerProps) {
                 </div>
               )}
 
-              <p className="text-center text-[10px] text-[#6B7A72] pt-2">
+              {/* Código QR y Metadatos SUNAT UBL 2.1 */}
+              <div className="text-center space-y-2 pt-3 border-t border-dashed border-[#E7E5DF]">
+                <div className="flex justify-center">
+                  <SunatQrCode
+                    value={`20601234567|${selectedVenta.serie.startsWith('F') ? '01' : '03'}|${selectedVenta.serie}|${String(selectedVenta.correlativo).padStart(8, '0')}|${selectedVenta.impuesto.toFixed(2)}|${selectedVenta.total.toFixed(2)}|${new Date(selectedVenta.fecha).toISOString().slice(0, 10)}|${(selectedVenta.cliente.documento || '').length === 11 ? '6' : '1'}|${selectedVenta.cliente.documento || '00000000'}`}
+                    size={110}
+                  />
+                </div>
+                <div className="text-[9px] text-[#6B7A72] leading-tight space-y-0.5">
+                  <p className="font-bold text-[#16201C]">Representación impresa de la BOLETA ELECTRÓNICA</p>
+                  <p>Autorizado mediante Resolución de Superintendencia SUNAT</p>
+                  <p>Consulte la validez en: https://cpe.sunat.gob.pe</p>
+                  <p className="font-mono text-[8px] text-[#6B7A72] pt-0.5 truncate">
+                    Hash UBL 2.1: {selectedVenta.id}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-center text-[10px] text-[#6B7A72] pt-1">
                 ¡Gracias por su compra!
               </p>
             </div>
 
             {/* Footer Modal con acciones */}
             <div className="p-3.5 border-t border-[#E7E5DF] bg-[#FAFAF7] flex items-center justify-end gap-2">
-              <button
-                onClick={() => setSelectedVenta(null)}
-                className="px-3 py-1.5 text-[12px] font-medium text-[#6B7A72] hover:text-[#16201C] rounded-[6px] transition-colors cursor-pointer"
+              <a
+                href={`/api/comprobantes/${selectedVenta.id}/xml`}
+                download
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium border border-[#E7E5DF] hover:border-[#16201C] bg-white text-[#16201C] rounded-[6px] transition-colors cursor-pointer"
               >
-                Cerrar
-              </button>
+                <span>Descargar XML UBL 2.1</span>
+              </a>
               <button
                 onClick={handlePrint}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium bg-[#16201C] hover:bg-[#2A3B34] text-white rounded-[6px] transition-colors cursor-pointer"

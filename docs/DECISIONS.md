@@ -22,3 +22,4 @@
 - Gestor interactivo de comprobantes (/admin/ventas): Dashboard de KPIs, filtrado dinámico por cliente/vendedor/estado y visor/reimpresión de ticket térmico 80mm.
 - Kardex Valorizado SUNAT 13.1 (/admin/movimientos?tab=sunat-13-1): Libro tributario oficial de inventarios con Costo Promedio Ponderado (CPP), catálogo 10/12 de comprobantes e impresión legal.
 - Reabastecimiento ROP y Compras en 1 Clic (/admin/compras?tab=reabastecimiento): Algoritmo predictivo de reposición por demanda diaria y lead time (5d), con emisión transaccional inmediata.
+- Facturación Electrónica UBL 2.1 y Código QR SUNAT: Generador nativo XML UBL 2.1 con DigestValue SHA-256 (/api/comprobantes/[id]/xml) y renderizado de QR reglamentario en ticket térmico.
