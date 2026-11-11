@@ -331,6 +331,13 @@ export function VentasManager({ ventas }: VentasManagerProps) {
 
             {/* Footer Modal con acciones */}
             <div className="p-3.5 border-t border-[#E7E5DF] bg-[#FAFAF7] flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedVenta(null)}
+                className="px-3 py-1.5 text-[12px] font-medium text-[#6B7A72] hover:text-[#16201C] rounded-[6px] transition-colors cursor-pointer"
+              >
+                Cerrar
+              </button>
               <a
                 href={`/api/comprobantes/${selectedVenta.id}/xml`}
                 download
