@@ -29,11 +29,17 @@ export default async function VendedorPage() {
   }
 
   // Consultar almacenes activos de la empresa
-  const { data: almacenesDb } = await supabase
+  let almacenesQuery = supabase
     .from('almacen')
     .select('id, nombre, es_principal')
     .eq('activo', true)
     .order('es_principal', { ascending: false })
+
+  if (usuario?.negocio_id) {
+    almacenesQuery = almacenesQuery.eq('negocio_id', usuario.negocio_id)
+  }
+
+  const { data: almacenesDb } = await almacenesQuery
 
   const almacenes = almacenesDb || []
   const initialAlmacenId =
@@ -55,7 +61,7 @@ export default async function VendedorPage() {
   }
 
   // Consultar productos activos iniciales
-  const { data: prods } = await supabase
+  let prodsQuery = supabase
     .from('productos')
     .select(`
       id,
@@ -68,7 +74,13 @@ export default async function VendedorPage() {
     `)
     .eq('activo', true)
     .order('nombre')
-    .limit(20)
+    .limit(100)
+
+  if (usuario?.negocio_id) {
+    prodsQuery = prodsQuery.eq('negocio_id', usuario.negocio_id)
+  }
+
+  const { data: prods } = await prodsQuery
 
   const items = (prods || []).map((p) => ({
     id: p.id,

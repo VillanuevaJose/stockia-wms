@@ -79,6 +79,7 @@ export function PuntoDeVenta({
   const [efectivoContado, setEfectivoContado] = useState<string>('')
   const [notasArqueo, setNotasArqueo] = useState<string>('')
   const [arqueoResultado, setArqueoResultado] = useState<string | null>(null)
+  const [soloConStock, setSoloConStock] = useState<boolean>(true)
 
   const [isSearching, startSearch] = useTransition()
   const [isSubmitting, startSubmit] = useTransition()
@@ -91,14 +92,20 @@ export function PuntoDeVenta({
     const baseList = query.trim() ? searchResults : initialProductos
     if (!stockPorAlmacen || !selectedAlmacenId) return baseList
 
-    return baseList.map((p) => {
+    const mapped = baseList.map((p) => {
       const realStock = stockPorAlmacen[p.id]?.[selectedAlmacenId] ?? 0
       return {
         ...p,
         stock: realStock,
       }
     })
-  }, [query, searchResults, initialProductos, stockPorAlmacen, selectedAlmacenId])
+
+    if (soloConStock) {
+      return mapped.filter((p) => p.stock > 0)
+    }
+
+    return mapped
+  }, [query, searchResults, initialProductos, stockPorAlmacen, selectedAlmacenId, soloConStock])
 
   const handleSedeChange = (nuevoId: string) => {
     if (carrito.length > 0) {
@@ -545,9 +552,20 @@ export function PuntoDeVenta({
           {/* Lista de Resultados de Catálogo */}
           <div className="bg-white rounded-[8px] border border-[#E7E5DF] overflow-hidden">
             <div className="px-4 py-2.5 bg-[#FAFAF7] border-b border-[#E7E5DF] flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7A72]">
-                Catálogo de Artículos Disponibles
-              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7A72]">
+                  Artículos Disponibles en Sede
+                </span>
+                <label className="flex items-center gap-1.5 cursor-pointer select-none text-[11px] text-[#6B7A72] hover:text-[#16201C] transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={soloConStock}
+                    onChange={(e) => setSoloConStock(e.target.checked)}
+                    className="rounded border-[#E7E5DF] text-[#16201C] focus:ring-0 w-3.5 h-3.5 cursor-pointer"
+                  />
+                  <span>Solo con stock</span>
+                </label>
+              </div>
               <span className="text-[11px] font-mono text-[#6B7A72]">
                 {catalogo.length} artículos
               </span>
@@ -559,13 +577,13 @@ export function PuntoDeVenta({
                   <Barcode size={32} className="mx-auto mb-2 text-[#6B7A72]/40" />
                   <p className="text-[13px] font-medium text-[#16201C]">
                     {query
-                      ? 'No se encontraron artículos con ese criterio'
-                      : 'No hay productos registrados en el almacén'}
+                      ? 'No hay stock disponible de este artículo en esta sede'
+                      : 'No hay productos con existencias disponibles en esta sede'}
                   </p>
                   <p className="text-[12px] text-[#6B7A72] mt-0.5">
                     {query
-                      ? 'Verifica el código de barras o término buscado.'
-                      : 'Crea tu primer producto desde el módulo de Productos.'}
+                      ? 'Consulta en "Productos y Stock" para verificar disponibilidad en otras sedes.'
+                      : 'Ingresa mercadería mediante Compras, Traslados o Aprovisionamiento Inicial.'}
                   </p>
                 </div>
               ) : (
