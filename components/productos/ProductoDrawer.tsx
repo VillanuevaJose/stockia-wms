@@ -295,17 +295,17 @@ export function ProductoDrawer({
           ) : (
             <div className="p-3 bg-[#FAFAF7] border border-[#E7E5DF] rounded-[6px] space-y-2">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-[#6B7A72] block">
-                Aprovisionamiento Inicial (Opcional)
+                Asignación a Sede y Stock Inicial (Opcional)
               </span>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] text-[#16201C] mb-1 font-medium">Almacén Destino</label>
+                  <label className="block text-[11px] text-[#16201C] mb-1 font-medium">Sede / Almacén Destino</label>
                   <select
                     name="almacen_id"
                     className="w-full px-2 py-1 text-xs bg-white border border-[#E7E5DF] rounded-[4px] focus:border-[#16201C] focus:outline-none"
                   >
-                    <option value="">-- Sin stock inicial --</option>
+                    <option value="">-- Sin asignar a sede aún --</option>
                     {almacenes.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.nombre} {a.es_principal ? '(Principal)' : ''}
@@ -315,7 +315,7 @@ export function ProductoDrawer({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] text-[#16201C] mb-1 font-medium">Cantidad Inicial</label>
+                  <label className="block text-[11px] text-[#16201C] mb-1 font-medium">Stock Inicial en Sede</label>
                   <input
                     type="number"
                     step="1"
@@ -326,6 +326,9 @@ export function ProductoDrawer({
                   />
                 </div>
               </div>
+              <p className="text-[10px] text-[#6B7A72] leading-tight">
+                El artículo se creará con esta existencia física disponible en el mostrador (POS) de la sede seleccionada.
+              </p>
             </div>
           )}
 
