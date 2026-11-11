@@ -32,15 +32,36 @@ export interface ReabastecimientoReporte {
 }
 
 export async function getSugerenciasReabastecimiento(): Promise<ReabastecimientoReporte> {
-  return withFastCache('reabastecimiento-rop', 15, async () => {
-    const supabase = await createClient()
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    // 1. Obtener productos activos
-    const { data: productos } = await supabase
+  let negocio_id: string | null = null
+  if (user) {
+    const { data: usuario } = await supabase
+      .from('usuarios')
+      .select('negocio_id')
+      .eq('id', user.id)
+      .maybeSingle()
+    negocio_id = usuario?.negocio_id || null
+  }
+
+  const cacheKey = `reabastecimiento-rop-${negocio_id || 'default'}`
+
+  return withFastCache(cacheKey, 15, async () => {
+    // 1. Obtener productos activos aislados por negocio
+    let prodQuery = supabase
       .from('productos')
       .select('id, sku, nombre, stock, stock_minimo, costo, categoria:categoria_id (nombre)')
       .eq('activo', true)
       .order('nombre')
+
+    if (negocio_id) {
+      prodQuery = prodQuery.eq('negocio_id', negocio_id)
+    }
+
+    const { data: productos } = await prodQuery
 
     if (!productos || productos.length === 0) {
       return {
@@ -55,13 +76,18 @@ export async function getSugerenciasReabastecimiento(): Promise<Reabastecimiento
       }
     }
 
-    // 2. Obtener proveedor por defecto o principal
-    const { data: proveedores } = await supabase
+    // 2. Obtener proveedor por defecto o principal del negocio
+    let provQuery = supabase
       .from('proveedor')
       .select('id, razon_social')
       .eq('activo', true)
       .order('created_at', { ascending: true })
 
+    if (negocio_id) {
+      provQuery = provQuery.eq('negocio_id', negocio_id)
+    }
+
+    const { data: proveedores } = await provQuery
     const primerProv = proveedores && proveedores.length > 0 ? proveedores[0] : null
 
     // 3. Obtener ventas de los últimos 30 días para calcular demanda diaria real
@@ -91,9 +117,9 @@ export async function getSugerenciasReabastecimiento(): Promise<Reabastecimiento
       const stockMin = Number(p.stock_minimo) || 0
       const costo = Number(p.costo) || 10
 
-      // Demanda diaria estimada: ventas en 30 días / 30, o derivado del stock mínimo si es nuevo
+      // Demanda diaria estimada: ventas reales en 30 días / 30, o derivado del stock mínimo si no registra ventas
       const ventasMes = mapaVentas[p.id] || 0
-      const demandaDiaria = ventasMes > 0 ? ventasMes / 30 : stockMin > 0 ? Math.max(0.2, stockMin / 30) : 0.5
+      const demandaDiaria = ventasMes > 0 ? ventasMes / 30 : stockMin > 0 ? stockMin / 30 : 0
 
       // Stock de seguridad: el mayor entre stock_minimo configurado o 3 días de demanda
       const stockSeguridad = Math.max(stockMin, Math.ceil(demandaDiaria * 3))

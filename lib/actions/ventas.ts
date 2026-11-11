@@ -508,9 +508,20 @@ export async function obtenerDetalleVentaAction(
     return { success: false, error: 'Sesión no iniciada.' }
   }
 
+  // Validar pertenencia del usuario al negocio (aislamiento multitenant IDOR)
+  const { data: usuario } = await supabase
+    .from('usuarios')
+    .select('negocio_id')
+    .eq('id', user.id)
+    .single()
+
+  if (!usuario?.negocio_id) {
+    return { success: false, error: 'Usuario no vinculado a ningún negocio.' }
+  }
+
   const adminClient = createAdminClient()
 
-  // 1. Obtener cabecera de la venta con cliente, vendedor y almacén
+  // 1. Obtener cabecera de la venta con cliente, vendedor y almacén aislada por negocio
   const { data: v, error: vErr } = await adminClient
     .from('venta')
     .select(`
@@ -527,6 +538,7 @@ export async function obtenerDetalleVentaAction(
       almacen:almacen_origen_id (nombre)
     `)
     .eq('id', ventaId)
+    .eq('negocio_id', usuario.negocio_id)
     .single()
 
   if (vErr || !v) {

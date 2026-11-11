@@ -14,20 +14,20 @@ export async function GET(request: NextRequest) {
 
   const adminClient = createAdminClient()
 
-  // 1. Consultar productos del negocio
+  // 1. Consultar productos del negocio autenticado (aislamiento multitenant estricto)
   let prodQuery = adminClient
     .from('productos')
     .select(`
       id,
       sku,
       nombre,
-      costo,
       precio_soles,
       stock,
       stock_minimo,
       activo,
       categoria:categoria_id (nombre)
     `)
+    .eq('negocio_id', auth.negocio_id)
     .eq('activo', true)
     .order('nombre')
 
@@ -41,10 +41,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Error al consultar inventario: ' + prodErr.message }, { status: 500 })
   }
 
-  // 2. Consultar desglose por sedes / almacenes
+  // 2. Consultar desglose por sedes / almacenes del negocio autenticado
   let invQuery = adminClient
     .from('inventario')
     .select('producto_id, stock_actual, almacen:almacen_id (id, nombre, codigo)')
+    .eq('negocio_id', auth.negocio_id)
 
   if (almacenFilter) {
     invQuery = invQuery.eq('almacen_id', almacenFilter)
@@ -86,7 +87,6 @@ export async function GET(request: NextRequest) {
       nombre: p.nombre,
       categoria: catRel?.nombre || 'General',
       precio_venta_pe: Number(p.precio_soles) || 0,
-      costo_referencial_pe: Number(p.costo) || 0,
       stock_disponible_total: stockTotal,
       stock_minimo_seguridad: stockMin,
       estado_existencia: stockTotal <= 0 ? 'AGOTADO' : stockTotal <= stockMin ? 'CRITICO' : 'DISPONIBLE',

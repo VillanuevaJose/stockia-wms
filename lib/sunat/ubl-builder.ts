@@ -9,9 +9,12 @@ export interface UblGenerationResult {
   sunatQrString: string
 }
 
-export function buildInvoiceUblXml(venta: DetalleVentaCompleto): UblGenerationResult {
-  const rucEmisor = '20601234567'
-  const razonSocialEmisor = 'STOCKIA LOGÍSTICA PERÚ S.A.C.'
+export function buildInvoiceUblXml(
+  venta: DetalleVentaCompleto,
+  empresa?: { ruc?: string; razon_social?: string }
+): UblGenerationResult {
+  const rucEmisor = empresa?.ruc || '20601234567'
+  const razonSocialEmisor = empresa?.razon_social || 'STOCKIA LOGÍSTICA PERÚ S.A.C.'
   const tipoComprobante = venta.serie.startsWith('F') ? '01' : '03'
   const correlativoStr = String(venta.correlativo).padStart(8, '0')
   const filename = `${rucEmisor}-${tipoComprobante}-${venta.serie}-${correlativoStr}.xml`
@@ -28,11 +31,12 @@ export function buildInvoiceUblXml(venta: DetalleVentaCompleto): UblGenerationRe
   const impuesto = Number(venta.impuesto) || 0
   const total = Number(venta.total) || 0
 
-  // Generar líneas de detalle
+  // Generar líneas de detalle conformes a la regla de cálculo SUNAT
   const linesXml = venta.items
     .map((item, idx) => {
       const lineNum = idx + 1
-      const itemSubtotal = item.subtotal / 1.18
+      const precioSinIgv = item.precio_unitario / 1.18
+      const itemSubtotal = precioSinIgv * item.cantidad
       const itemIgv = item.subtotal - itemSubtotal
       return `  <cac:InvoiceLine>
     <cbc:ID>${lineNum}</cbc:ID>
@@ -67,7 +71,7 @@ export function buildInvoiceUblXml(venta: DetalleVentaCompleto): UblGenerationRe
       </cac:SellersItemIdentification>
     </cac:Item>
     <cac:Price>
-      <cbc:PriceAmount currencyID="PEN">${(item.precio_unitario / 1.18).toFixed(2)}</cbc:PriceAmount>
+      <cbc:PriceAmount currencyID="PEN">${precioSinIgv.toFixed(2)}</cbc:PriceAmount>
     </cac:Price>
   </cac:InvoiceLine>`
     })

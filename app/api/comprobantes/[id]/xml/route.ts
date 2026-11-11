@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { obtenerDetalleVentaAction } from '@/lib/actions/ventas'
 import { buildInvoiceUblXml } from '@/lib/sunat/ubl-builder'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(
   request: NextRequest,
@@ -18,7 +19,13 @@ export async function GET(
       return NextResponse.json({ error: res.error || 'Comprobante no encontrado' }, { status: 404 })
     }
 
-    const { xml, filename } = buildInvoiceUblXml(res.venta)
+    const adminClient = createAdminClient()
+    const { data: negocio } = await adminClient.from('negocio').select('ruc, nombre').limit(1).maybeSingle()
+
+    const { xml, filename } = buildInvoiceUblXml(res.venta, {
+      ruc: negocio?.ruc || undefined,
+      razon_social: negocio?.nombre ? `${negocio.nombre.toUpperCase()} S.A.C.` : undefined,
+    })
 
     return new Response(xml, {
       status: 200,

@@ -57,15 +57,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No se encontró un almacén válido para procesar el movimiento' }, { status: 400 })
     }
 
-    // 2. Mapear SKUs a IDs de productos
+    // 2. Mapear SKUs a IDs de productos del negocio autenticado
     const skus = items.map((i) => i.sku)
     const { data: prodsDb, error: prodErr } = await adminClient
       .from('productos')
       .select('id, sku, costo, stock')
+      .eq('negocio_id', auth.negocio_id)
       .in('sku', skus)
 
     if (prodErr || !prodsDb || prodsDb.length === 0) {
-      return NextResponse.json({ error: 'No se encontraron los productos especificados por SKU' }, { status: 404 })
+      return NextResponse.json({ error: 'No se encontraron los productos especificados por SKU en su catálogo' }, { status: 404 })
     }
 
     const mapProds: Record<string, { id: string; costo: number; stock: number }> = {}
@@ -95,9 +96,9 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // 3. Ejecutar función transaccional en PostgreSQL
+    // 3. Ejecutar función transaccional en PostgreSQL con almacenes válidos
     const origenAlm = tipo === 'SALIDA' ? targetAlmacenId : null
-    const destinoAlm = tipo === 'ENTRADA' ? targetAlmacenId : null
+    const destinoAlm = tipo === 'ENTRADA' || tipo === 'AJUSTE' ? targetAlmacenId : null
 
     // Obtener un usuario de sistema para la auditoría
     const { data: usr } = await adminClient
@@ -105,7 +106,7 @@ export async function POST(request: NextRequest) {
       .select('id')
       .eq('negocio_id', auth.negocio_id)
       .limit(1)
-      .single()
+      .maybeSingle()
 
     const { data: movId, error: rpcErr } = await adminClient.rpc('registrar_movimiento', {
       p_negocio_id: auth.negocio_id,

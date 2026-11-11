@@ -110,7 +110,7 @@ export function KardexSunatView({
               </div>
               <div>
                 <span className="text-[#6B7A72]">R.U.C.: </span>
-                <span className="font-bold">20601234567</span>
+                <span className="font-bold">{data.empresa.ruc}</span>
               </div>
               <div>
                 <span className="text-[#6B7A72]">CÓDIGO DE LA EXISTENCIA: </span>
@@ -118,7 +118,7 @@ export function KardexSunatView({
               </div>
               <div>
                 <span className="text-[#6B7A72]">APELLIDOS Y NOMBRES O RAZÓN SOCIAL: </span>
-                <span className="font-bold">STOCKIA LOGÍSTICA PERÚ S.A.C.</span>
+                <span className="font-bold">{data.empresa.razon_social}</span>
               </div>
               <div>
                 <span className="text-[#6B7A72]">TIPO DE EXISTENCIA: </span>

@@ -25,6 +25,10 @@ export interface KardexSunatFila {
 }
 
 export interface KardexSunatData {
+  empresa: {
+    ruc: string
+    razon_social: string
+  }
   producto: {
     id: string
     sku: string
@@ -74,14 +78,18 @@ export async function getKardexSunat131(options?: {
   const cacheKey = `kardex-sunat-${productoId}-${options?.almacenId || 'all'}-${options?.periodo || new Date().getFullYear()}`
 
   return withFastCache(cacheKey, 15, async () => {
-    // 2. Obtener datos maestros del producto
-    const { data: producto } = await supabase
-      .from('productos')
-      .select('id, sku, nombre, costo, precio_soles')
-      .eq('id', productoId)
-      .single()
+    // 2. Obtener datos maestros del producto y empresa
+    const [{ data: producto }, { data: negocio }] = await Promise.all([
+      supabase.from('productos').select('id, sku, nombre, costo, precio_soles').eq('id', productoId).single(),
+      supabase.from('negocio').select('nombre, ruc').limit(1).maybeSingle(),
+    ])
 
     if (!producto) return null
+
+    const empresaData = {
+      ruc: negocio?.ruc || '20601234567',
+      razon_social: negocio?.nombre ? `${negocio.nombre.toUpperCase()} S.A.C.` : 'STOCKIA LOGÍSTICA PERÚ S.A.C.',
+    }
 
     // 3. Obtener nombre de almacén
     let almacenNombre = 'Consolidado Todas las Sedes'
@@ -164,8 +172,24 @@ export async function getKardexSunat131(options?: {
       const cant = Math.abs(Number(d.cantidad) || 0)
       if (cant === 0) continue
 
+      // Si se filtra por almacén específico, determinar si la transferencia entra o sale
+      let isTransferEntrada = false
+      if (mov.tipo === 'TRANSFERENCIA') {
+        if (options?.almacenId && options.almacenId !== 'TODOS') {
+          if (mov.almacen_destino_id === options.almacenId) {
+            isTransferEntrada = true
+          } else if (mov.almacen_origen_id !== options.almacenId) {
+            continue
+          }
+        } else {
+          // En consolidado empresarial, un traslado interno no incrementa ni decrementa las existencias totales
+          continue
+        }
+      }
+
       const isEntrada =
         mov.tipo === 'ENTRADA' ||
+        isTransferEntrada ||
         (mov.tipo === 'AJUSTE' && (mov.motivo.toLowerCase().includes('sobrante') || Number(d.cantidad) > 0))
 
       // Extraer datos de comprobante de la referencia o motivo
@@ -184,14 +208,17 @@ export async function getKardexSunat131(options?: {
         tipoOp = '16'
         tipoOpDesc = 'Saldo Inicial'
       } else if (mov.referencia_tipo === 'VENTA') {
-        tipoComp = '03'
-        tipoCompDesc = 'Boleta de Venta'
         tipoOp = '01'
         tipoOpDesc = 'Venta Nacional'
-        const match = mov.motivo.match(/([B|F]\d{3})-(\d+)/)
+        const match = mov.motivo.match(/([BF]\d{3})-(\d+)/)
         if (match) {
           serieComp = match[1]
           numComp = match[2]
+          tipoComp = serieComp.startsWith('F') ? '01' : '03'
+          tipoCompDesc = serieComp.startsWith('F') ? 'Factura' : 'Boleta de Venta'
+        } else {
+          tipoComp = '03'
+          tipoCompDesc = 'Boleta de Venta'
         }
       } else if (mov.referencia_tipo === 'COMPRA') {
         tipoComp = '01'
@@ -269,6 +296,7 @@ export async function getKardexSunat131(options?: {
     }
 
     return {
+      empresa: empresaData,
       producto: {
         id: producto.id,
         sku: producto.sku,

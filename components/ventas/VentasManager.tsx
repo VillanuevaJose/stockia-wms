@@ -18,12 +18,18 @@ export function VentasManager({ ventas }: VentasManagerProps) {
   const [isLoadingDetalle, setIsLoadingDetalle] = useState(false)
   const [isPending, startTransition] = useTransition()
 
-  // KPIs
-  const totalMonto = ventas.reduce((acc, v) => acc + (v.estado === 'PAGADA' ? v.total : 0), 0)
+  // KPIs con cálculo estadístico y zona horaria de Perú (America/Lima)
+  const ventasPagadas = ventas.filter((v) => v.estado === 'PAGADA')
+  const totalMonto = ventasPagadas.reduce((acc, v) => acc + v.total, 0)
   const totalComprobantes = ventas.length
-  const ticketPromedio = totalComprobantes > 0 ? totalMonto / totalComprobantes : 0
-  const hoyStr = new Date().toISOString().slice(0, 10)
-  const ventasHoy = ventas.filter((v) => v.fecha && v.fecha.slice(0, 10) === hoyStr).length
+  const ticketPromedio = ventasPagadas.length > 0 ? totalMonto / ventasPagadas.length : 0
+
+  const hoyLima = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date())
+  const ventasHoy = ventas.filter((v) => {
+    if (!v.fecha) return false
+    const fechaLima = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Lima' }).format(new Date(v.fecha))
+    return fechaLima === hoyLima
+  }).length
 
   // Filtrado reactivo
   const filteredVentas = ventas.filter((v) => {
@@ -212,6 +218,22 @@ export function VentasManager({ ventas }: VentasManagerProps) {
       {/* Modal / Vista de Ticket Térmico 80mm */}
       {selectedVenta && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[2px]">
+          <style>{`
+            @media print {
+              body * { visibility: hidden !important; }
+              #print-area, #print-area * { visibility: visible !important; }
+              #print-area {
+                position: fixed !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 80mm !important;
+                margin: 0 !important;
+                padding: 10px !important;
+                background: white !important;
+                box-shadow: none !important;
+              }
+            }
+          `}</style>
           <div className="bg-white rounded-[10px] border border-[#E7E5DF] shadow-xl w-full max-w-[420px] max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
             {/* Header Modal */}
             <div className="p-3.5 border-b border-[#E7E5DF] flex items-center justify-between bg-[#FAFAF7]">

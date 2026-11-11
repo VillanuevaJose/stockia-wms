@@ -339,6 +339,23 @@ export function PuntoDeVenta({
     )
   }
 
+  const fijarCantidad = (id: string, nueva: number) => {
+    setErrorMsg(null)
+    setCarrito((prev) =>
+      prev.map((item) => {
+        if (item.id === id) {
+          const val = Math.max(1, nueva)
+          if (val > item.stock) {
+            setErrorMsg(`Solo hay ${item.stock} unidades disponibles en almacén.`)
+            return { ...item, cantidad: item.stock }
+          }
+          return { ...item, cantidad: val }
+        }
+        return item
+      })
+    )
+  }
+
   const eliminarDelCarrito = (id: string) => {
     setCarrito((prev) => prev.filter((i) => i.id !== id))
   }
@@ -696,7 +713,7 @@ export function PuntoDeVenta({
                         </span>
                       </div>
 
-                      {/* Controles de Cantidad */}
+                      {/* Controles de Cantidad con Entrada Directa */}
                       <div className="flex items-center gap-1.5">
                         <button
                           type="button"
@@ -705,9 +722,14 @@ export function PuntoDeVenta({
                         >
                           -
                         </button>
-                        <span className="font-mono text-[12px] font-bold tabular-nums w-7 text-center">
-                          {item.cantidad}
-                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={item.stock}
+                          value={item.cantidad}
+                          onChange={(e) => fijarCantidad(item.id, parseInt(e.target.value) || 1)}
+                          className="font-mono text-[12px] font-bold tabular-nums w-11 text-center border border-[#E7E5DF] rounded-[4px] py-0.5 focus:outline-none focus:border-[#16201C] bg-white"
+                        />
                         <button
                           type="button"
                           onClick={() => cambiarCantidad(item.id, 1)}
@@ -815,7 +837,7 @@ export function PuntoDeVenta({
                         </span>
                         <input
                           type="number"
-                          step="0.10"
+                          step="0.01"
                           min="0"
                           value={montoRecibido}
                           onChange={(e) => setMontoRecibido(e.target.value)}
@@ -832,9 +854,9 @@ export function PuntoDeVenta({
                       </button>
                     </div>
 
-                    {/* Botones de Efectivo Rápido */}
+                    {/* Botones de Efectivo Rápido con Billetes Oficiales */}
                     <div className="grid grid-cols-5 gap-1.5">
-                      {[5, 10, 20, 50, 100].map((billete) => (
+                      {[10, 20, 50, 100, 200].map((billete) => (
                         <button
                           key={billete}
                           type="button"
@@ -1066,7 +1088,7 @@ export function PuntoDeVenta({
                     </label>
                     <input
                       type="number"
-                      step="0.50"
+                      step="0.01"
                       min="0"
                       value={efectivoContado}
                       onChange={(e) => setEfectivoContado(e.target.value)}
