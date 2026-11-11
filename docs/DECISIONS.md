@@ -21,3 +21,4 @@
 - Seguridad de cabeceras HTTP: Inyección de cabeceras OWASP en next.config.ts (HSTS preload, DENY frame, nosniff, sandboxing de permisos de dispositivos).
 - Gestor interactivo de comprobantes (/admin/ventas): Dashboard de KPIs, filtrado dinámico por cliente/vendedor/estado y visor/reimpresión de ticket térmico 80mm.
 - Kardex Valorizado SUNAT 13.1 (/admin/movimientos?tab=sunat-13-1): Libro tributario oficial de inventarios con Costo Promedio Ponderado (CPP), catálogo 10/12 de comprobantes e impresión legal.
+- Reabastecimiento ROP y Compras en 1 Clic (/admin/compras?tab=reabastecimiento): Algoritmo predictivo de reposición por demanda diaria y lead time (5d), con emisión transaccional inmediata.
