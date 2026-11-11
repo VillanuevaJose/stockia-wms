@@ -454,3 +454,165 @@ export async function registrarArqueoCajaAction(data: {
         : `Arqueo registrado: Sobrante de S/ ${diferencia.toFixed(2)} reportado en auditoría.`,
   }
 }
+
+export type DetalleVentaCompleto = {
+  id: string
+  serie: string
+  correlativo: number
+  numero_comprobante: string
+  subtotal: number
+  impuesto: number
+  total: number
+  estado: string
+  fecha: string
+  cliente: {
+    nombre: string
+    documento?: string | null
+  }
+  vendedor: {
+    nombre: string
+  }
+  almacen: {
+    nombre: string
+  }
+  items: Array<{
+    id: string
+    sku: string
+    nombre: string
+    cantidad: number
+    precio_unitario: number
+    subtotal: number
+  }>
+  pagos: Array<{
+    id: string
+    metodo: string
+    monto: number
+    referencia?: string | null
+    fecha: string
+  }>
+}
+
+export async function obtenerDetalleVentaAction(
+  ventaId: string
+): Promise<{ success: boolean; error?: string; venta?: DetalleVentaCompleto }> {
+  if (!ventaId) {
+    return { success: false, error: 'ID de venta inválido.' }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { success: false, error: 'Sesión no iniciada.' }
+  }
+
+  const adminClient = createAdminClient()
+
+  // 1. Obtener cabecera de la venta con cliente, vendedor y almacén
+  const { data: v, error: vErr } = await adminClient
+    .from('venta')
+    .select(`
+      id,
+      serie,
+      correlativo,
+      subtotal,
+      impuesto,
+      total,
+      estado,
+      created_at,
+      cliente:cliente_id (nombre_o_razon_social, numero_documento),
+      usuario:usuario_id (nombre_completo),
+      almacen:almacen_origen_id (nombre)
+    `)
+    .eq('id', ventaId)
+    .single()
+
+  if (vErr || !v) {
+    return { success: false, error: 'No se encontró la venta solicitada.' }
+  }
+
+  // 2. Obtener items desglosados
+  const { data: detalles } = await adminClient
+    .from('detalle_venta')
+    .select(`
+      id,
+      cantidad,
+      precio_unitario,
+      subtotal,
+      producto:producto_id (nombre, sku)
+    `)
+    .eq('venta_id', ventaId)
+
+  // 3. Obtener pagos
+  const { data: pagos } = await adminClient
+    .from('pago')
+    .select('id, metodo, monto, referencia_externa, created_at')
+    .eq('venta_id', ventaId)
+
+  interface RelVal {
+    nombre_o_razon_social?: string
+    numero_documento?: string
+    nombre_completo?: string
+    nombre?: string
+    sku?: string
+  }
+
+  const getRel = (rel: unknown): RelVal | null => {
+    if (!rel) return null
+    if (Array.isArray(rel)) return (rel[0] as RelVal) || null
+    return rel as RelVal
+  }
+
+  const clienteRel = getRel(v.cliente)
+  const usuarioRel = getRel(v.usuario)
+  const almacenRel = getRel(v.almacen)
+
+  const items = (detalles || []).map((d) => {
+    const prodRel = getRel(d.producto)
+    return {
+      id: d.id,
+      sku: prodRel?.sku || 'S/SKU',
+      nombre: prodRel?.nombre || 'Artículo sin nombre',
+      cantidad: Number(d.cantidad) || 0,
+      precio_unitario: Number(d.precio_unitario) || 0,
+      subtotal: Number(d.subtotal) || 0,
+    }
+  })
+
+  const pagosFormatted = (pagos || []).map((p) => ({
+    id: p.id,
+    metodo: p.metodo,
+    monto: Number(p.monto) || 0,
+    referencia: p.referencia_externa,
+    fecha: p.created_at,
+  }))
+
+  return {
+    success: true,
+    venta: {
+      id: v.id,
+      serie: v.serie,
+      correlativo: v.correlativo,
+      numero_comprobante: `${v.serie}-${String(v.correlativo).padStart(8, '0')}`,
+      subtotal: Number(v.subtotal) || 0,
+      impuesto: Number(v.impuesto) || 0,
+      total: Number(v.total) || 0,
+      estado: v.estado,
+      fecha: v.created_at,
+      cliente: {
+        nombre: clienteRel?.nombre_o_razon_social || 'Público General',
+        documento: clienteRel?.numero_documento || null,
+      },
+      vendedor: {
+        nombre: usuarioRel?.nombre_completo || 'Vendedor',
+      },
+      almacen: {
+        nombre: almacenRel?.nombre || 'Sede Principal',
+      },
+      items,
+      pagos: pagosFormatted,
+    },
+  }
+}

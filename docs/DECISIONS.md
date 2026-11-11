@@ -18,3 +18,5 @@
 - Conteo físico y auditoría de mermas: Drawer de toma de inventario con balance en Soles y ajuste atómico en PostgreSQL vía registrar_movimiento.
 - Directorio maestro de proveedores: Padrón fiscal SUNAT con RUC validado, canales de contacto comercial y vinculación directa a órdenes de compra.
 - Guía de Traslado inter-sedes: Despacho en origen (SALIDA), custodia en ruta, recepción en destino (ENTRADA) y Guía de Remisión interna imprimible.
+- Seguridad de cabeceras HTTP: Inyección de cabeceras OWASP en next.config.ts (HSTS preload, DENY frame, nosniff, sandboxing de permisos de dispositivos).
+- Gestor interactivo de comprobantes (/admin/ventas): Dashboard de KPIs, filtrado dinámico por cliente/vendedor/estado y visor/reimpresión de ticket térmico 80mm.
