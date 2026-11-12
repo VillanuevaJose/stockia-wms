@@ -47,6 +47,7 @@ export const registroSchema = z
       .regex(/[0-9]/, 'Debe contener al menos un número')
       .regex(/[^A-Za-z0-9]/, 'Debe contener al menos un símbolo especial (*, $, @, #, etc.)'),
     confirmarPassword: z.string().min(1, 'Confirma tu contraseña'),
+    culqi_charge_id: z.string().optional(),
   })
   .refine((data) => data.password === data.confirmarPassword, {
     message: 'Las contraseñas no coinciden',

@@ -97,6 +97,7 @@ export async function registrarUsuarioAction(
     email: formData.get('email'),
     password: formData.get('password'),
     confirmarPassword: formData.get('confirmarPassword'),
+    culqi_charge_id: formData.get('culqi_charge_id') ? String(formData.get('culqi_charge_id')).trim() : undefined,
   }
 
   const validated = registroSchema.safeParse(rawData)
@@ -116,8 +117,9 @@ export async function registrarUsuarioAction(
   }
 
   const supabase = await createClient()
+  const culqiChargeId = validated.data.culqi_charge_id || (formData.get('culqi_charge_id') ? String(formData.get('culqi_charge_id')).trim() : null)
 
-  // Los nuevos usuarios se registran con rol operativo inicial ('vendedor')
+  // Los nuevos usuarios que registran su negocio se crean como administradores
   const { data, error } = await supabase.auth.signUp({
     email: validated.data.email,
     password: validated.data.password,
@@ -126,7 +128,8 @@ export async function registrarUsuarioAction(
         nombre_completo: validated.data.nombre_completo,
         nombre_negocio: validated.data.nombre_negocio,
         ruc: validated.data.ruc || null,
-        rol: 'vendedor',
+        rol: 'admin',
+        culqi_charge_id: culqiChargeId,
       },
     },
   })
@@ -179,6 +182,7 @@ export async function registrarUsuarioAction(
           nombre_completo: validated.data.nombre_completo,
           rol: 'admin',
           nombre_negocio: validated.data.nombre_negocio,
+          culqi_charge_id: culqiChargeId,
         },
       })
 
@@ -192,17 +196,25 @@ export async function registrarUsuarioAction(
     }
   }
 
-  // Cuenta aprovisionada y confirmada con credenciales listas para ingresar
-  if (data.user && !data.session) {
-    return {
-      success: true,
-      requiresEmailConfirmation: true,
-      message:
-        '¡Registro exitoso! Tu cuenta ha sido creada como colaborador inicial con rol básico (Ventas / Sin sede asignada). El Administrador General asignará tu sede física y perfil operativo.',
+  // Si no se inició sesión de inmediato tras signUp, iniciamos sesión con credenciales
+  if (!data.session) {
+    const { error: signInErr } = await supabase.auth.signInWithPassword({
+      email: validated.data.email,
+      password: validated.data.password,
+    })
+
+    if (signInErr) {
+      console.warn('[REGISTRO AUTO-LOGIN NOTICE]', signInErr.message)
+      return {
+        success: true,
+        requiresEmailConfirmation: true,
+        message:
+          '¡Registro exitoso! Tu empresa ha sido creada y tu usuario configurado como Administrador General. Inicia sesión para acceder a tu panel.',
+      }
     }
   }
 
-  redirect('/vendedor')
+  redirect('/admin')
 }
 
 // Acción para cerrar la sesión del usuario
