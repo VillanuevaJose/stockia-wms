@@ -89,9 +89,16 @@ export async function crearUsuarioAction(
 
   if (isInvite) {
     // Modo Invitación por Correo Oficial (Supabase Auth)
+    const { headers } = await import('next/headers')
+    const headersList = await headers()
+    const host = headersList.get('host')
+    const protocol = headersList.get('x-forwarded-proto') || (host?.includes('localhost') ? 'http' : 'https')
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (host ? `${protocol}://${host}` : 'http://localhost:3000')
+
     const { data: inviteAuth, error: inviteErr } = await adminClient.auth.admin.inviteUserByEmail(
       validated.data.email,
       {
+        redirectTo: `${siteUrl}/auth/callback?next=/completar-invitacion`,
         data: {
           nombre_completo: validated.data.nombre_completo,
           rol: validated.data.rol,
