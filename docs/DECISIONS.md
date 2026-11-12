@@ -25,3 +25,4 @@
 - Facturación Electrónica UBL 2.1 y Código QR SUNAT: Generador nativo XML UBL 2.1 con DigestValue SHA-256 (/api/comprobantes/[id]/xml) y renderizado de QR reglamentario en ticket térmico.
 - API Pública B2B y Gestión de API Keys (/api/v1/inventario, /api/v1/movimientos): Endpoints REST autenticados mediante x-api-key para sincronización omnicanal externa (Shopify, ERPs).
 - Blindaje Multi-Tenant y Auditoría SUNAT: Filtro estricto negocio_id en APIs/Kardex/Ventas, ajuste con almacén no nulo (chk_movimiento_almacenes), pasos de centavos (0.01) y billetes peruanos en POS.
+- Suscripción Culqi Sandbox e Invitaciones B2B: Checkout simulado con algoritmo Luhn en /registro, redirección directa a /admin, y flujo de invitación con seteo de contraseña en /completar-invitacion.
