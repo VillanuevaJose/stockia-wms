@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { createClient } from '../../lib/supabase/server'
+import { createAdminClient } from '../../lib/supabase/admin'
 import { invalidateFastCache } from '../../lib/cache/fast-cache'
 import { z } from 'zod'
 
@@ -79,6 +80,18 @@ export async function completarInvitacionAction(
     .from('usuarios')
     .update({ activo: true })
     .eq('id', user.id)
+
+  try {
+    const adminClient = createAdminClient()
+    await adminClient.auth.admin.updateUserById(user.id, {
+      user_metadata: {
+        password_set: true,
+        invitacion_pendiente: false,
+      },
+    })
+  } catch (err) {
+    console.warn('[UPDATE USER METADATA WARNING]', err)
+  }
 
   invalidateFastCache('usuarios')
   invalidateFastCache('usuarios-list')

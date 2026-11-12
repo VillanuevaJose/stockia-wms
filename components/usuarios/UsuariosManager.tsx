@@ -237,15 +237,17 @@ export function UsuariosManager({ usuarios, almacenes = [], currentUserId }: Pro
                           </span>
                         ) : (
                           (() => {
-                            const isOnline = u.last_sign_in_at
-                              ? Date.now() - new Date(u.last_sign_in_at).getTime() < 15 * 60 * 1000
-                              : false
+                            const isOnline =
+                              isSelf ||
+                              (u.last_sign_in_at
+                                ? Date.now() - new Date(u.last_sign_in_at).getTime() < 60 * 60 * 1000
+                                : false)
                             return isOnline ? (
                               <span
                                 className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-[4px]"
-                                title="Sesión activa en el sistema"
+                                title={isSelf ? 'Tu sesión actual (En línea)' : 'Sesión activa en el sistema'}
                               >
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                 <span>En línea</span>
                               </span>
                             ) : (

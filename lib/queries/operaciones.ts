@@ -368,7 +368,12 @@ export async function getUsuariosList(): Promise<UsuarioRow[]> {
     // Correlacionar con metadatos de autenticación (invitaciones y última conexión)
     let authMap = new Map<
       string,
-      { invited_at?: string | null; confirmed_at?: string | null; last_sign_in_at?: string | null }
+      {
+        invited_at?: string | null
+        confirmed_at?: string | null
+        last_sign_in_at?: string | null
+        password_set?: boolean
+      }
     >()
 
     try {
@@ -382,6 +387,7 @@ export async function getUsuariosList(): Promise<UsuarioRow[]> {
               invited_at: u.invited_at,
               confirmed_at: u.confirmed_at,
               last_sign_in_at: u.last_sign_in_at,
+              password_set: Boolean(u.user_metadata?.password_set),
             },
           ])
         )
@@ -408,7 +414,8 @@ export async function getUsuariosList(): Promise<UsuarioRow[]> {
           almacen?: { id: string; nombre: string; codigo: string | null } | { id: string; nombre: string; codigo: string | null }[] | null
         }>).map((u) => {
           const authInfo = authMap.get(u.id)
-          const isPending = Boolean(authInfo?.invited_at && !authInfo?.confirmed_at)
+          // Un usuario está pendiente si fue invitado y aún no ha definido su contraseña
+          const isPending = Boolean(authInfo?.invited_at && !authInfo?.password_set)
           return {
             ...u,
             almacen: Array.isArray(u.almacen) ? u.almacen[0] || null : u.almacen || null,
@@ -432,7 +439,7 @@ export async function getUsuariosList(): Promise<UsuarioRow[]> {
       const authInfo = authMap.get(u.id)
       return {
         ...u,
-        is_pending: Boolean(authInfo?.invited_at && !authInfo?.confirmed_at),
+        is_pending: Boolean(authInfo?.invited_at && !authInfo?.password_set),
         invited_at: authInfo?.invited_at || null,
         confirmed_at: authInfo?.confirmed_at || null,
         last_sign_in_at: authInfo?.last_sign_in_at || null,
