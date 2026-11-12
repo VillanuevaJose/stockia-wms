@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Manrope, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { Toaster } from '../components/ui/Toast'
+import { AuthHashListener } from '../components/auth/AuthHashListener'
 
 const manrope = Manrope({
   variable: '--font-sans',
@@ -42,6 +43,7 @@ export default function RootLayout({
       className={`${manrope.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans bg-[#FAFAF7] text-[#16201C]">
+        <AuthHashListener />
         {children}
         <Toaster />
       </body>

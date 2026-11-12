@@ -1,4 +1,5 @@
 import { createClient } from '../supabase/server'
+import { createAdminClient } from '../supabase/admin'
 import { withFastCache } from '../cache/fast-cache'
 
 // ==========================================
@@ -354,11 +355,40 @@ export interface UsuarioRow {
     nombre: string
     codigo: string | null
   } | null
+  is_pending?: boolean
+  invited_at?: string | null
+  confirmed_at?: string | null
+  last_sign_in_at?: string | null
 }
 
 export async function getUsuariosList(): Promise<UsuarioRow[]> {
   return withFastCache('usuarios-list', 15, async () => {
     const supabase = await createClient()
+
+    // Correlacionar con metadatos de autenticación (invitaciones y última conexión)
+    let authMap = new Map<
+      string,
+      { invited_at?: string | null; confirmed_at?: string | null; last_sign_in_at?: string | null }
+    >()
+
+    try {
+      const adminClient = createAdminClient()
+      const { data: authData } = await adminClient.auth.admin.listUsers({ perPage: 1000 })
+      if (authData?.users) {
+        authMap = new Map(
+          authData.users.map((u) => [
+            u.id,
+            {
+              invited_at: u.invited_at,
+              confirmed_at: u.confirmed_at,
+              last_sign_in_at: u.last_sign_in_at,
+            },
+          ])
+        )
+      }
+    } catch (authErr) {
+      console.warn('[AUTH LIST USERS WARNING]', authErr)
+    }
 
     try {
       const { data: usuarios, error } = await supabase
@@ -376,10 +406,18 @@ export async function getUsuariosList(): Promise<UsuarioRow[]> {
           created_at: string
           almacen_id?: string | null
           almacen?: { id: string; nombre: string; codigo: string | null } | { id: string; nombre: string; codigo: string | null }[] | null
-        }>).map((u) => ({
-          ...u,
-          almacen: Array.isArray(u.almacen) ? u.almacen[0] || null : u.almacen || null,
-        })) as UsuarioRow[]
+        }>).map((u) => {
+          const authInfo = authMap.get(u.id)
+          const isPending = Boolean(authInfo?.invited_at && !authInfo?.confirmed_at)
+          return {
+            ...u,
+            almacen: Array.isArray(u.almacen) ? u.almacen[0] || null : u.almacen || null,
+            is_pending: isPending,
+            invited_at: authInfo?.invited_at || null,
+            confirmed_at: authInfo?.confirmed_at || null,
+            last_sign_in_at: authInfo?.last_sign_in_at || null,
+          }
+        }) as UsuarioRow[]
       }
     } catch {
       // Fallback si la migración de columna aún no se ejecutó
@@ -390,7 +428,16 @@ export async function getUsuariosList(): Promise<UsuarioRow[]> {
       .select('id, nombre_completo, email, rol, activo, created_at')
       .order('created_at', { ascending: false })
 
-    return (fallbackUsuarios || []) as UsuarioRow[]
+    return (fallbackUsuarios || []).map((u) => {
+      const authInfo = authMap.get(u.id)
+      return {
+        ...u,
+        is_pending: Boolean(authInfo?.invited_at && !authInfo?.confirmed_at),
+        invited_at: authInfo?.invited_at || null,
+        confirmed_at: authInfo?.confirmed_at || null,
+        last_sign_in_at: authInfo?.last_sign_in_at || null,
+      }
+    }) as UsuarioRow[]
   })
 }
 

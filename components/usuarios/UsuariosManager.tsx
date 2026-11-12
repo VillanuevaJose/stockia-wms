@@ -202,19 +202,70 @@ export function UsuariosManager({ usuarios, almacenes = [], currentUserId }: Pro
                         </span>
                       </td>
                       <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 text-[12px]">
+                        {u.is_pending ? (
                           <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              u.activo ? 'bg-[#2E7D32]' : 'bg-[#D32F2F]'
-                            }`}
-                          />
-                          <span className={u.activo ? 'text-[#16201C]' : 'text-[#6B7A72]'}>
-                            {u.activo ? 'Activo' : 'Inactivo'}
+                            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded-[4px]"
+                            title="Invitación enviada por correo. El colaborador aún no ha definido su contraseña."
+                          >
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            <span>Pendiente</span>
                           </span>
-                        </span>
+                        ) : !u.activo ? (
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#6B7A72] bg-[#FAFAF7] border border-[#E7E5DF] px-2 py-0.5 rounded-[4px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#D32F2F]" />
+                            <span>Inactivo</span>
+                          </span>
+                        ) : (
+                          (() => {
+                            const isOnline = u.last_sign_in_at
+                              ? Date.now() - new Date(u.last_sign_in_at).getTime() < 15 * 60 * 1000
+                              : false
+                            return isOnline ? (
+                              <span
+                                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-800 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-[4px]"
+                                title="Sesión activa en el sistema"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                <span>En línea</span>
+                              </span>
+                            ) : (
+                              <span
+                                className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#16201C] bg-[#FAFAF7] border border-[#E7E5DF] px-2 py-0.5 rounded-[4px]"
+                                title={
+                                  u.last_sign_in_at
+                                    ? `Último acceso: ${new Date(u.last_sign_in_at).toLocaleString('es-PE', {
+                                        day: '2-digit',
+                                        month: '2-digit',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                        hour12: true,
+                                      })}`
+                                    : 'Sin registros de sesión'
+                                }
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#6B7A72]" />
+                                <span>Desconectado</span>
+                              </span>
+                            )
+                          })()
+                        )}
                       </td>
-                      <td className="py-2.5 px-3.5 text-right font-mono text-[12px] text-[#6B7A72] tabular-nums whitespace-nowrap">
-                        {new Date(u.created_at).toLocaleDateString('es-PE')}
+                      <td className="py-2.5 px-3.5 text-right font-mono text-[11px] text-[#16201C] tabular-nums whitespace-nowrap">
+                        <div>
+                          {new Date(u.created_at).toLocaleDateString('es-PE', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                          })}
+                        </div>
+                        <div className="text-[10px] text-[#6B7A72]">
+                          {new Date(u.created_at).toLocaleTimeString('es-PE', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: true,
+                          })}
+                        </div>
                       </td>
                       <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
                         <div className="inline-flex items-center justify-end gap-2">

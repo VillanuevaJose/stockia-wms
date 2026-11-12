@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { createClient } from '../../lib/supabase/server'
+import { invalidateFastCache } from '../../lib/cache/fast-cache'
 import { z } from 'zod'
 
 const passwordSchema = z
@@ -78,6 +79,9 @@ export async function completarInvitacionAction(
     .from('usuarios')
     .update({ activo: true })
     .eq('id', user.id)
+
+  invalidateFastCache('usuarios')
+  invalidateFastCache('usuarios-list')
 
   // 3. Consultar rol para redirigir
   const { data: perfil } = await supabase
