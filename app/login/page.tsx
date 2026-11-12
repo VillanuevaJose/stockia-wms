@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
+import Link from 'next/link'
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { parseFastAuthUser } from '../../lib/supabase/auth-fast'
@@ -78,6 +79,15 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
             </div>
           )}
           <LoginForm />
+          <div className="mt-4 pt-3 border-t border-[#ebebeb] text-center">
+            <span className="text-[12px] text-[#666666]">¿Fuiste invitado por tu empresa? </span>
+            <Link
+              href="/activar"
+              className="text-[12px] font-medium text-[#171717] hover:underline"
+            >
+              Activar cuenta
+            </Link>
+          </div>
         </div>
 
         {/* Micro-nota de seguridad */}

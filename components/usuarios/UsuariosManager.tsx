@@ -2,11 +2,13 @@
 
 import { useState, useTransition } from 'react'
 import { Plus, X, Loader2, Users, AlertTriangle, Edit, Warehouse, CheckCircle2 } from '../ui/icons'
+import { toast } from '../ui/Toast'
 import {
   crearUsuarioAction,
   toggleUsuarioActivoAction,
   actualizarRolYSedeUsuarioAction,
 } from '../../app/admin/usuarios/actions'
+import { obtenerEnlaceInvitacionAction } from '../../app/activar/actions'
 import type { UsuarioRow, AlmacenDetailRow } from '../../lib/queries/operaciones'
 
 interface Props {
@@ -30,6 +32,24 @@ export function UsuariosManager({ usuarios, almacenes = [], currentUserId }: Pro
   const [assignError, setAssignError] = useState<string | null>(null)
   const [assignSuccess, setAssignSuccess] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [copiandoEmail, setCopiandoEmail] = useState<string | null>(null)
+
+  const handleCopiarEnlace = async (email: string) => {
+    setCopiandoEmail(email)
+    try {
+      const res = await obtenerEnlaceInvitacionAction(email)
+      if (res.success && res.link) {
+        await navigator.clipboard.writeText(res.link)
+        toast.success('Enlace de invitación copiado al portapapeles.')
+      } else {
+        toast.error(res.error || 'No se pudo obtener el enlace de invitación.')
+      }
+    } catch {
+      toast.error('Error al copiar el enlace.')
+    } finally {
+      setCopiandoEmail(null)
+    }
+  }
 
   const handleToggle = (usuarioId: string, actual: boolean) => {
     setToggleError(null)
@@ -269,6 +289,21 @@ export function UsuariosManager({ usuarios, almacenes = [], currentUserId }: Pro
                       </td>
                       <td className="py-2.5 px-3.5 text-right whitespace-nowrap">
                         <div className="inline-flex items-center justify-end gap-2">
+                          {u.is_pending && (
+                            <button
+                              type="button"
+                              disabled={copiandoEmail === u.email}
+                              onClick={() => handleCopiarEnlace(u.email)}
+                              className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2 py-1 rounded-[5px] transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
+                              title="Copiar enlace de activación directa para compartirlo con el colaborador"
+                            >
+                              {copiandoEmail === u.email && (
+                                <Loader2 size={11} className="animate-spin" />
+                              )}
+                              <span>Copiar Enlace</span>
+                            </button>
+                          )}
+
                           <button
                             type="button"
                             onClick={() => handleOpenAssignModal(u)}
