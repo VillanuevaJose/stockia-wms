@@ -48,10 +48,12 @@ export function ProductoDrawer({
 
   const action = isEditing ? editarProducto : agregarProducto
   const [state, formAction, isPending] = useActionState<FormState | null, FormData>(action, null)
+  const hasNotifiedRef = useRef(false)
 
-  // Cerrar y notificar al completarse con éxito
+  // Cerrar y notificar al completarse con éxito una sola vez por envío
   useEffect(() => {
-    if (state?.success) {
+    if (state?.success && !hasNotifiedRef.current) {
+      hasNotifiedRef.current = true
       toast.success(state.message || 'Operación completada con éxito')
       onClose()
     }

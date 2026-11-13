@@ -85,21 +85,26 @@ export function ProductosClient({
       />
 
       {/* Modal de Carga Masiva (Excel / CSV) */}
-      <CargaMasivaModal
-        isOpen={isCargaMasivaOpen}
-        onClose={() => setIsCargaMasivaOpen(false)}
-        almacenes={almacenes}
-      />
+      {isCargaMasivaOpen && (
+        <CargaMasivaModal
+          isOpen={isCargaMasivaOpen}
+          onClose={() => setIsCargaMasivaOpen(false)}
+          almacenes={almacenes}
+        />
+      )}
 
       {/* Drawer Lateral de Creación / Edición */}
-      <ProductoDrawer
-        isOpen={isDrawerOpen}
-        onClose={handleCloseDrawer}
-        productoEditar={productoEditar}
-        categorias={categorias}
-        unidades={unidades}
-        almacenes={almacenes}
-      />
+      {isDrawerOpen && (
+        <ProductoDrawer
+          key={productoEditar ? `edit-${productoEditar.id}` : 'nuevo'}
+          isOpen={isDrawerOpen}
+          onClose={handleCloseDrawer}
+          productoEditar={productoEditar}
+          categorias={categorias}
+          unidades={unidades}
+          almacenes={almacenes}
+        />
+      )}
     </div>
   )
 }
