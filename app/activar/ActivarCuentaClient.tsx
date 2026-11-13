@@ -21,13 +21,16 @@ import {
 export function ActivarCuentaClient() {
   const [email, setEmail] = useState('')
   const [resultado, setResultado] = useState<ConsultaInvitacionResult | null>(null)
-  const [mensajeReenvio, setMensajeReenvio] = useState<string | null>(null)
+  const [notificacionReenvio, setNotificacionReenvio] = useState<{
+    tipo: 'success' | 'error'
+    mensaje: string
+  } | null>(null)
   const [isConsulting, startConsult] = useTransition()
   const [isReenviando, startReenvio] = useTransition()
 
   const handleBuscar = (e: React.FormEvent) => {
     e.preventDefault()
-    setMensajeReenvio(null)
+    setNotificacionReenvio(null)
     startConsult(async () => {
       const res = await consultarInvitacionAction(email)
       setResultado(res)
@@ -36,12 +39,19 @@ export function ActivarCuentaClient() {
 
   const handleReenviar = () => {
     if (!resultado?.datos?.email) return
+    setNotificacionReenvio(null)
     startReenvio(async () => {
       const res = await reenviarInvitacionAction(resultado.datos!.email)
       if (res.success) {
-        setMensajeReenvio(res.message || 'Correo reenviado.')
+        setNotificacionReenvio({
+          tipo: 'success',
+          mensaje: res.message || 'Correo reenviado con éxito.',
+        })
       } else {
-        setMensajeReenvio(res.error || 'No se pudo reenviar.')
+        setNotificacionReenvio({
+          tipo: 'error',
+          mensaje: res.error || 'No se pudo reenviar la invitación.',
+        })
       }
     })
   }
@@ -163,10 +173,21 @@ export function ActivarCuentaClient() {
                     </button>
                   </div>
 
-                  {mensajeReenvio && (
-                    <p className="text-[11px] text-[#2E7D32] bg-emerald-50 border border-emerald-200 p-2 rounded-[4px]">
-                      {mensajeReenvio}
-                    </p>
+                  {notificacionReenvio && (
+                    <div
+                      className={`text-[11px] p-2.5 rounded-[4px] border flex items-start gap-2 ${
+                        notificacionReenvio.tipo === 'success'
+                          ? 'text-[#2E7D32] bg-emerald-50 border-emerald-200'
+                          : 'text-[#D32F2F] bg-red-50 border-red-200'
+                      }`}
+                    >
+                      {notificacionReenvio.tipo === 'success' ? (
+                        <CheckCircle2 size={14} className="text-[#2E7D32] shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertTriangle size={14} className="text-[#D32F2F] shrink-0 mt-0.5" />
+                      )}
+                      <span className="leading-snug">{notificacionReenvio.mensaje}</span>
+                    </div>
                   )}
                 </div>
               ) : (

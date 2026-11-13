@@ -48,11 +48,11 @@ export async function consultarInvitacionAction(email: string): Promise<Consulta
     }
   }
 
-  // Verificar en Supabase Auth si aún no confirma su contraseña
+  // Verificar en Supabase Auth si aún no confirma su contraseña personal
   const { data: authData } = await adminClient.auth.admin.listUsers({ perPage: 1000 })
   const authUser = authData?.users?.find((u) => u.email?.toLowerCase() === cleanEmail)
 
-  const isPending = Boolean(authUser?.invited_at && !authUser?.confirmed_at)
+  const isPending = Boolean(authUser?.invited_at && !authUser?.user_metadata?.password_set)
 
   // @ts-expect-error Supabase nested
   const empresaNombre = usuario.negocio?.nombre || 'Empresa Asociada'
@@ -97,7 +97,15 @@ export async function reenviarInvitacionAction(email: string): Promise<{ success
   })
 
   if (error) {
-    return { success: false, error: 'Error al reenviar invitación: ' + error.message }
+    let friendlyError = error.message
+    if (
+      error.message.toLowerCase().includes('rate limit') ||
+      error.message.toLowerCase().includes('rate_limit')
+    ) {
+      friendlyError =
+        'Límite de envíos por hora alcanzado (protección anti-spam de Supabase). Espera unos minutos antes de reintentar o pídele a tu Administrador que te comparta tu enlace de activación directo.'
+    }
+    return { success: false, error: friendlyError }
   }
 
   return { success: true, message: 'Invitación reenviada con éxito a ' + cleanEmail }

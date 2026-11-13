@@ -109,9 +109,17 @@ export async function crearUsuarioAction(
     )
 
     if (inviteErr || !inviteAuth.user) {
+      let friendlyError = inviteErr?.message || 'No se pudo enviar la invitación por correo.'
+      if (
+        inviteErr?.message?.toLowerCase().includes('rate limit') ||
+        inviteErr?.message?.toLowerCase().includes('rate_limit')
+      ) {
+        friendlyError =
+          'Se alcanzó el límite de envío de correos por hora de Supabase. Puedes crear la cuenta asignando una contraseña temporal inicial, o esperar unos minutos.'
+      }
       return {
         success: false,
-        error: inviteErr?.message || 'No se pudo enviar la invitación por correo.',
+        error: friendlyError,
       }
     }
     newUserId = inviteAuth.user.id
