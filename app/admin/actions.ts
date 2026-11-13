@@ -250,6 +250,9 @@ export async function desactivarProducto(formData: FormData): Promise<void> {
 
   if (!id) return
 
+  // Eliminar registros de inventario físico del producto
+  await supabase.from('inventario').delete().eq('producto_id', id)
+
   const { error } = await supabase
     .from('productos')
     .update({ activo: false, updated_at: new Date().toISOString() })

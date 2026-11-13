@@ -33,7 +33,7 @@ export async function getInventarioFisico(): Promise<{
       producto_id,
       stock_actual,
       almacen:almacen_id (nombre),
-      producto:producto_id (id, sku, nombre, costo, precio_soles, stock_minimo, categoria:categoria_id (nombre))
+      producto:producto_id (id, sku, nombre, costo, precio_soles, stock_minimo, activo, categoria:categoria_id (nombre))
     `)
 
   if (error || !invData || invData.length === 0) {
@@ -96,18 +96,26 @@ export async function getInventarioFisico(): Promise<{
       nombre?: string
       stock_minimo?: number
       costo?: number
+      activo?: boolean
       categoria?: { nombre?: string } | { nombre?: string }[]
     } | {
       sku?: string
       nombre?: string
       stock_minimo?: number
       costo?: number
+      activo?: boolean
       categoria?: { nombre?: string } | { nombre?: string }[]
     }[]
     almacen?: { nombre?: string } | { nombre?: string }[]
   }
 
-  const items: InventarioFisicoRow[] = (invData as unknown as RawInventarioQueryRow[]).map((row) => {
+  // Filtrar registros cuyo producto está desactivado
+  const activeInvData = (invData as unknown as RawInventarioQueryRow[]).filter((row) => {
+    const prod = Array.isArray(row.producto) ? row.producto[0] : row.producto
+    return prod?.activo !== false
+  })
+
+  const items: InventarioFisicoRow[] = activeInvData.map((row) => {
     const prod = Array.isArray(row.producto) ? row.producto[0] || {} : row.producto || {}
     const alm = Array.isArray(row.almacen) ? row.almacen[0] || {} : row.almacen || {}
     const cat = Array.isArray(prod.categoria) ? prod.categoria[0]?.nombre || 'General' : prod.categoria?.nombre || 'General'
