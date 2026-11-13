@@ -39,7 +39,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${origin}/login?error=desactivado`)
     }
 
-    // Si viene un parámetro next seguro (ej. /completar-invitacion)
+    // Si el usuario fue invitado o aún no ha configurado su contraseña personal,
+    // se le deriva OBLIGATORIAMENTE al apartado exclusivo para configurar su cuenta
+    const isInvite =
+      type === 'invite' ||
+      type === 'recovery' ||
+      next === '/completar-invitacion' ||
+      !authUser.user_metadata?.password_set
+
+    if (isInvite) {
+      return NextResponse.redirect(`${origin}/completar-invitacion`)
+    }
+
+    // Si viene un parámetro next seguro
     if (next && next.startsWith('/') && !next.startsWith('//')) {
       return NextResponse.redirect(`${origin}${next}`)
     }

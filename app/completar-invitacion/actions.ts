@@ -27,6 +27,72 @@ export type FormState = {
   fieldErrors?: Record<string, string>
 }
 
+export type PerfilInvitado = {
+  id: string
+  nombre_completo: string
+  email: string
+  rol: string
+  empresaNombre: string
+  empresaRuc: string | null
+  sedeNombre: string
+  sedeCodigo: string | null
+}
+
+export async function obtenerDatosInvitacionAction(): Promise<{
+  success: boolean
+  perfil?: PerfilInvitado
+  error?: string
+}> {
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { success: false, error: 'No hay sesión de invitación activa.' }
+  }
+
+  const { data: perfil, error } = await supabase
+    .from('usuarios')
+    .select(`
+      id,
+      nombre_completo,
+      email,
+      rol,
+      negocio:negocio_id (nombre, ruc),
+      almacen:almacen_id (nombre, codigo)
+    `)
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (error || !perfil) {
+    return { success: false, error: 'No se encontró la ficha del colaborador.' }
+  }
+
+  // @ts-expect-error Supabase nested
+  const empresaNombre = perfil?.negocio?.nombre || 'Empresa Asociada'
+  // @ts-expect-error Supabase nested
+  const empresaRuc = perfil?.negocio?.ruc || null
+  // @ts-expect-error Supabase nested
+  const sedeNombre = perfil?.almacen?.nombre || 'Sede Central'
+  // @ts-expect-error Supabase nested
+  const sedeCodigo = perfil?.almacen?.codigo || null
+
+  return {
+    success: true,
+    perfil: {
+      id: perfil.id,
+      nombre_completo: perfil.nombre_completo || user.email || 'Colaborador',
+      email: perfil.email || user.email || '',
+      rol: perfil.rol,
+      empresaNombre,
+      empresaRuc,
+      sedeNombre,
+      sedeCodigo,
+    },
+  }
+}
+
 export async function completarInvitacionAction(
   prevState: FormState | null,
   formData: FormData

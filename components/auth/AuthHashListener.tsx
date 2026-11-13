@@ -30,7 +30,12 @@ export function AuthHashListener() {
             // Limpiar el hash de la barra de direcciones por seguridad
             window.history.replaceState(null, '', window.location.pathname)
 
-            if (type === 'invite' || type === 'recovery') {
+            const isInvite =
+              type === 'invite' ||
+              type === 'recovery' ||
+              !data.session.user.user_metadata?.password_set
+
+            if (isInvite) {
               router.replace('/completar-invitacion')
             } else {
               router.replace('/admin')
