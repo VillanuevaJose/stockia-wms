@@ -14,11 +14,14 @@ const productoSchema = z.object({
   categoria_id: z.string().optional().nullable(),
   unidad_medida_id: z.string().optional().nullable(),
   costo: z.coerce.number().min(0, 'El costo no puede ser negativo'),
-  precio_venta: z.coerce.number().min(0, 'El precio de venta no puede ser negativo'),
+  precio_venta: z.coerce.number().min(0.01, 'El precio de venta debe ser mayor a 0'),
   stock_minimo: z.coerce.number().min(0, 'El stock mínimo no puede ser negativo'),
   almacen_id: z.string().optional().nullable(),
   stock_inicial: z.coerce.number().min(0, 'El stock inicial no puede ser negativo').default(0),
-})
+}).refine(
+  (data) => data.costo <= data.precio_venta,
+  { message: 'El costo no puede ser mayor al precio de venta', path: ['costo'] }
+)
 
 export type FormState = {
   success?: boolean
@@ -92,14 +95,24 @@ export async function agregarProducto(
 
   const stockInicial = validated.data.stock_inicial
 
-  // 1. Insertar el producto con su stock directo en la tabla productos
-  const { data: nuevoProducto, error: prodError } = await supabase
+  // 0. Verificar si existe un producto DESACTIVADO con el mismo SKU → reactivar
+  const { data: productoInactivo } = await supabase
     .from('productos')
-    .insert([
-      {
-        negocio_id: negocioId,
+    .select('id')
+    .eq('negocio_id', negocioId)
+    .eq('sku', validated.data.sku)
+    .eq('activo', false)
+    .limit(1)
+    .maybeSingle()
+
+  let productoId: string | undefined
+
+  if (productoInactivo) {
+    // Reactivar el producto desactivado con los nuevos datos
+    const { error: reactivarError } = await supabase
+      .from('productos')
+      .update({
         nombre: validated.data.nombre,
-        sku: validated.data.sku,
         codigo_barras: validated.data.codigo_barras,
         descripcion: validated.data.descripcion,
         categoria_id: validated.data.categoria_id || null,
@@ -110,24 +123,53 @@ export async function agregarProducto(
         stock_minimo: validated.data.stock_minimo,
         stock: stockInicial,
         activo: true,
-      },
-    ])
-    .select('id')
-    .single()
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', productoInactivo.id)
 
-  if (prodError) {
-    if (prodError.message.includes('uq_productos_negocio_sku')) {
-      return { success: false, error: 'El código SKU ya está registrado en este negocio.' }
+    if (reactivarError) {
+      return { success: false, error: 'Error al reactivar producto: ' + reactivarError.message }
     }
-    return { success: false, error: 'Error al registrar producto: ' + prodError.message }
+    productoId = productoInactivo.id
+  } else {
+    // 1. Insertar el producto con su stock directo en la tabla productos
+    const { data: nuevoProducto, error: prodError } = await supabase
+      .from('productos')
+      .insert([
+        {
+          negocio_id: negocioId,
+          nombre: validated.data.nombre,
+          sku: validated.data.sku,
+          codigo_barras: validated.data.codigo_barras,
+          descripcion: validated.data.descripcion,
+          categoria_id: validated.data.categoria_id || null,
+          unidad_medida_id: validated.data.unidad_medida_id || null,
+          costo: validated.data.costo,
+          precio_venta: validated.data.precio_venta,
+          precio_soles: validated.data.precio_venta,
+          stock_minimo: validated.data.stock_minimo,
+          stock: stockInicial,
+          activo: true,
+        },
+      ])
+      .select('id')
+      .single()
+
+    if (prodError) {
+      if (prodError.message.includes('uq_productos_negocio_sku')) {
+        return { success: false, error: 'El código SKU ya está registrado en este negocio.' }
+      }
+      return { success: false, error: 'Error al registrar producto: ' + prodError.message }
+    }
+    productoId = nuevoProducto?.id
   }
 
   // 2. Si hay almacén, asegurar el registro directo en la tabla inventario físico
-  if (almacenId && nuevoProducto?.id) {
+  if (almacenId && productoId) {
     await supabase.from('inventario').upsert([
       {
         almacen_id: almacenId,
-        producto_id: nuevoProducto.id,
+        producto_id: productoId,
         stock_actual: stockInicial,
       },
     ], { onConflict: 'almacen_id,producto_id' })
