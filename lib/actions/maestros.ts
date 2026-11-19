@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createClient } from '../supabase/server'
-import { createAdminClient } from '../supabase/admin'
 
 const categoriaSchema = z.object({
   nombre: z.string().trim().min(2, 'El nombre debe tener al menos 2 caracteres'),
@@ -38,8 +37,7 @@ export async function crearCategoriaAction(prevState: unknown, formData: FormDat
     return { success: false, error: 'Acceso denegado.' }
   }
 
-  const adminClient = createAdminClient()
-  const { error } = await adminClient.from('categoria').insert({
+  const { error } = await supabase.from('categoria').insert({
     negocio_id: usuario.negocio_id,
     nombre: validated.data.nombre,
     descripcion: validated.data.descripcion || null,
@@ -93,8 +91,7 @@ export async function crearAlmacenAction(prevState: unknown, formData: FormData)
     return { success: false, error: 'Solo administradores pueden crear sedes y almacenes.' }
   }
 
-  const adminClient = createAdminClient()
-  const { error } = await adminClient.from('almacen').insert({
+  const { error } = await supabase.from('almacen').insert({
     negocio_id: usuario.negocio_id,
     nombre: validated.data.nombre,
     codigo: validated.data.codigo || null,

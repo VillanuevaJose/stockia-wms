@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createClient } from '../supabase/server'
-import { createAdminClient } from '../supabase/admin'
 import { invalidateFastCache } from '../cache/fast-cache'
 
 const itemCompraSchema = z.object({
@@ -60,13 +59,12 @@ export async function registrarCompraAction(
   }
 
   const negocio_id = usuario.negocio_id
-  const adminClient = createAdminClient()
 
   // 1. Resolver proveedor
   let proveedor_id = validated.data.proveedor_id
 
   if (!proveedor_id && validated.data.nuevo_proveedor_nombre) {
-    const { data: newProv, error: provErr } = await adminClient
+    const { data: newProv, error: provErr } = await supabase
       .from('proveedor')
       .insert({
         negocio_id,
@@ -85,7 +83,7 @@ export async function registrarCompraAction(
 
   if (!proveedor_id) {
     // Si no se especificó proveedor, buscar o crear uno por defecto "Proveedor General"
-    const { data: provGen } = await adminClient
+    const { data: provGen } = await supabase
       .from('proveedor')
       .select('id')
       .eq('negocio_id', negocio_id)
@@ -95,7 +93,7 @@ export async function registrarCompraAction(
     if (provGen) {
       proveedor_id = provGen.id
     } else {
-      const { data: createdGen } = await adminClient
+      const { data: createdGen } = await supabase
         .from('proveedor')
         .insert({
           negocio_id,
@@ -111,7 +109,7 @@ export async function registrarCompraAction(
   // 2. Resolver almacén destino
   let almacen_destino_id = validated.data.almacen_destino_id
   if (!almacen_destino_id) {
-    const { data: alm } = await adminClient
+    const { data: alm } = await supabase
       .from('almacen')
       .select('id')
       .eq('negocio_id', negocio_id)
@@ -130,7 +128,7 @@ export async function registrarCompraAction(
   let compraId: string | null = null
   const totalCompra = validated.data.detalles.reduce((acc, d) => acc + d.cantidad * d.costo_unitario, 0)
 
-  const { data: rpcId, error: rpcErr } = await adminClient.rpc('registrar_compra', {
+  const { data: rpcId, error: rpcErr } = await supabase.rpc('registrar_compra', {
     p_negocio_id: negocio_id,
     p_usuario_id: user.id,
     p_proveedor_id: proveedor_id,
@@ -142,7 +140,7 @@ export async function registrarCompraAction(
 
   if (rpcErr) {
     // Fallback nativo si la función SQL falla por columna movimiento_id
-    const { data: nuevaCompra, error: insErr } = await adminClient
+    const { data: nuevaCompra, error: insErr } = await supabase
       .from('compra')
       .insert({
         negocio_id,
@@ -173,10 +171,10 @@ export async function registrarCompraAction(
       subtotal: d.cantidad * d.costo_unitario,
     }))
 
-    await adminClient.from('detalle_compra').insert(detallesPayload)
+    await supabase.from('detalle_compra').insert(detallesPayload)
 
     // Ingresar existencias al almacén mediante movimiento oficial
-    await adminClient.rpc('registrar_movimiento', {
+    await supabase.rpc('registrar_movimiento', {
       p_negocio_id: negocio_id,
       p_usuario_id: user.id,
       p_tipo: 'ENTRADA',
@@ -232,12 +230,11 @@ export async function generarCompraRapidaRopAction(params: {
   }
 
   const negocio_id = usuario.negocio_id
-  const adminClient = createAdminClient()
 
   // 1. Resolver proveedor
   let provId = params.proveedor_id
   if (!provId) {
-    const { data: prov } = await adminClient
+    const { data: prov } = await supabase
       .from('proveedor')
       .select('id')
       .eq('negocio_id', negocio_id)
@@ -247,7 +244,7 @@ export async function generarCompraRapidaRopAction(params: {
     if (prov) {
       provId = prov.id
     } else {
-      const { data: np } = await adminClient
+      const { data: np } = await supabase
         .from('proveedor')
         .insert({
           negocio_id,
@@ -264,7 +261,7 @@ export async function generarCompraRapidaRopAction(params: {
   // 2. Resolver almacén
   let almId = params.almacen_id
   if (!almId) {
-    const { data: alm } = await adminClient
+    const { data: alm } = await supabase
       .from('almacen')
       .select('id')
       .eq('negocio_id', negocio_id)
@@ -282,7 +279,7 @@ export async function generarCompraRapidaRopAction(params: {
   const total = params.cantidad * params.costo_unitario
 
   // 3. Insertar orden de compra
-  const { data: compra, error: cErr } = await adminClient
+  const { data: compra, error: cErr } = await supabase
     .from('compra')
     .insert({
       negocio_id,
@@ -303,7 +300,7 @@ export async function generarCompraRapidaRopAction(params: {
   }
 
   // 4. Detalle de compra
-  await adminClient.from('detalle_compra').insert({
+  await supabase.from('detalle_compra').insert({
     compra_id: compra.id,
     producto_id: params.producto_id,
     cantidad: params.cantidad,
@@ -312,7 +309,7 @@ export async function generarCompraRapidaRopAction(params: {
   })
 
   // 5. Ingreso de existencias al almacén
-  await adminClient.rpc('registrar_movimiento', {
+  await supabase.rpc('registrar_movimiento', {
     p_negocio_id: negocio_id,
     p_usuario_id: user.id,
     p_tipo: 'ENTRADA',

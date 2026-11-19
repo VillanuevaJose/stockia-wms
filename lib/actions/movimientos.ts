@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createClient } from '../supabase/server'
-import { createAdminClient } from '../supabase/admin'
 
 const itemMovimientoSchema = z.object({
   producto_id: z.string().uuid('ID de producto inválido'),
@@ -58,7 +57,6 @@ export async function registrarMovimientoAction(
   }
 
   const negocio_id = usuario.negocio_id
-  const adminClient = createAdminClient()
 
   let origen_id = validated.data.almacen_origen_id || null
   let destino_id = validated.data.almacen_destino_id || null
@@ -76,7 +74,7 @@ export async function registrarMovimientoAction(
     }
   }
 
-  const { data: movId, error: rpcErr } = await adminClient.rpc('registrar_movimiento', {
+  const { data: movId, error: rpcErr } = await supabase.rpc('registrar_movimiento', {
     p_negocio_id: negocio_id,
     p_usuario_id: user.id,
     p_tipo: validated.data.tipo,

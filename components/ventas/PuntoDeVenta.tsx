@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useTransition, useEffect, useCallback, useMemo } from 'react'
 import {
   Search,
   ShoppingCart,
@@ -12,7 +12,6 @@ import {
   CreditCard,
   Barcode,
   Camera,
-  X,
   Calculator,
   Banknote,
 } from '../ui/icons'
@@ -20,10 +19,10 @@ import {
   buscarProductosParaVentaAction,
   registrarVentaAction,
   obtenerResumenCajaTurnoAction,
-  registrarArqueoCajaAction,
   type VentaResult,
   type ResumenCaja,
 } from '../../lib/actions/ventas'
+import { PosCameraModal, PosArqueoCajaModal, PosVentaExitosa } from './pos'
 
 interface ProductoItem {
   id: string
@@ -69,21 +68,13 @@ export function PuntoDeVenta({
 
   // Modales de Cámara y Arqueo
   const [isCameraOpen, setIsCameraOpen] = useState(false)
-  const [cameraError, setCameraError] = useState<string | null>(null)
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const mediaStreamRef = useRef<MediaStream | null>(null)
-
   const [isArqueoOpen, setIsArqueoOpen] = useState(false)
   const [resumenCaja, setResumenCaja] = useState<ResumenCaja | null>(null)
   const [isLoadingResumen, startResumenTransition] = useTransition()
-  const [efectivoContado, setEfectivoContado] = useState<string>('')
-  const [notasArqueo, setNotasArqueo] = useState<string>('')
-  const [arqueoResultado, setArqueoResultado] = useState<string | null>(null)
   const [soloConStock, setSoloConStock] = useState<boolean>(true)
 
   const [isSearching, startSearch] = useTransition()
   const [isSubmitting, startSubmit] = useTransition()
-  const [isSubmittingArqueo, startSubmitArqueo] = useTransition()
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [ventaExitosa, setVentaExitosa] = useState<(VentaResult & { vuelto?: number }) | null>(null)
 
@@ -257,76 +248,6 @@ export function PuntoDeVenta({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [buscarYAgregarPorCodigo])
 
-  // ===== 2. LECTOR CON CÁMARA DE CELULAR (MODAL STREAM) =====
-  useEffect(() => {
-    let active = true
-    let intervalId: NodeJS.Timeout | null = null
-
-    if (isCameraOpen) {
-      navigator.mediaDevices
-        ?.getUserMedia({
-          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
-        })
-        .then((stream) => {
-          if (!active) {
-            stream.getTracks().forEach((t) => t.stop())
-            return
-          }
-          mediaStreamRef.current = stream
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream
-            videoRef.current.play().catch(() => {})
-          }
-
-          if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
-            const detector = new (window as unknown as { BarcodeDetector: new (opts: unknown) => { detect: (el: unknown) => Promise<Array<{ rawValue: string }>> } }).BarcodeDetector({
-              formats: ['ean_13', 'ean_8', 'code_128', 'code_39', 'qr_code', 'upc_a', 'upc_e'],
-            })
-
-            intervalId = setInterval(async () => {
-              if (
-                videoRef.current &&
-                videoRef.current.readyState === videoRef.current.HAVE_ENOUGH_DATA
-              ) {
-                try {
-                  const codes = await detector.detect(videoRef.current)
-                  if (codes && codes.length > 0) {
-                    const rawValue = codes[0].rawValue
-                    if (rawValue) {
-                      buscarYAgregarPorCodigo(rawValue)
-                      setIsCameraOpen(false)
-                    }
-                  }
-                } catch {
-                  // Frame capture skip
-                }
-              }
-            }, 350)
-          }
-        })
-        .catch((err) => {
-          setCameraError(
-            'No se pudo acceder a la cámara. Concede permisos de video en el navegador o usa la pistola de barras.'
-          )
-          console.warn('Camera error:', err)
-        })
-    } else {
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach((t) => t.stop())
-        mediaStreamRef.current = null
-      }
-      if (intervalId) clearInterval(intervalId)
-    }
-
-    return () => {
-      active = false
-      if (intervalId) clearInterval(intervalId)
-      if (mediaStreamRef.current) {
-        mediaStreamRef.current.getTracks().forEach((t) => t.stop())
-      }
-    }
-  }, [isCameraOpen, buscarYAgregarPorCodigo])
-
   const cambiarCantidad = (id: string, delta: number) => {
     setErrorMsg(null)
     setCarrito((prev) =>
@@ -421,40 +342,12 @@ export function PuntoDeVenta({
 
   // ===== 4. APERTURA DE ARQUEO DE CAJA =====
   const handleOpenArqueo = () => {
-    setArqueoResultado(null)
     setIsArqueoOpen(true)
     startResumenTransition(async () => {
       const data = await obtenerResumenCajaTurnoAction()
       setResumenCaja(data)
     })
   }
-
-  const handleGuardarArqueo = () => {
-    if (!resumenCaja) return
-    const contado = parseFloat(efectivoContado)
-    if (isNaN(contado) || contado < 0) {
-      setErrorMsg('Ingresa un monto válido de efectivo contado en caja.')
-      return
-    }
-
-    startSubmitArqueo(async () => {
-      const res = await registrarArqueoCajaAction({
-        monto_esperado: resumenCaja.totalEfectivo,
-        monto_contado: contado,
-        notas: notasArqueo,
-      })
-
-      if (res.success) {
-        setArqueoResultado(res.mensaje || 'Arqueo de caja registrado correctamente.')
-      } else {
-        setErrorMsg(res.error || 'Error al guardar arqueo.')
-      }
-    })
-  }
-
-  const contadoNum = parseFloat(efectivoContado) || 0
-  const esperadoNum = resumenCaja?.totalEfectivo || 0
-  const diferenciaArqueo = Math.round((contadoNum - esperadoNum) * 100) / 100
 
   return (
     <div className="relative">
@@ -465,7 +358,7 @@ export function PuntoDeVenta({
           <span className="text-[13px] font-semibold text-[#16201C]">
             Lector de Código de Barras Activo
           </span>
-          <span className="hidden sm:inline-block text-[11px] text-[#6B7A72] font-mono bg-[#FAFAF7] px-2 py-0.5 rounded border border-[#E7E5DF]">
+          <span className="hidden sm:inline-block text-[11px] text-[#6B7A72] font-sans bg-[#FAFAF7] px-2 py-0.5 rounded border border-[#E7E5DF]">
             Pistola USB / Bluetooth lista
           </span>
           {almacenes && almacenes.length > 1 ? (
@@ -496,10 +389,7 @@ export function PuntoDeVenta({
           {/* Botón Lector con Cámara de Celular */}
           <button
             type="button"
-            onClick={() => {
-              setCameraError(null)
-              setIsCameraOpen(true)
-            }}
+            onClick={() => setIsCameraOpen(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] bg-[#FAFAF7] hover:bg-[#16201C] hover:text-white border border-[#E7E5DF] text-[#16201C] text-[12px] font-medium transition-colors cursor-pointer"
             title="Activa la cámara del celular para escanear etiquetas"
           >
@@ -526,7 +416,7 @@ export function PuntoDeVenta({
             <CheckCircle2 size={16} className="text-emerald-600" />
             <span>{scannedFeedback}</span>
           </div>
-          <span className="text-[11px] font-mono text-emerald-700">+1 en carrito</span>
+          <span className="text-[11px] font-sans text-emerald-700">+1 en carrito</span>
         </div>
       )}
 
@@ -566,7 +456,7 @@ export function PuntoDeVenta({
                   <span>Solo con stock</span>
                 </label>
               </div>
-              <span className="text-[11px] font-mono text-[#6B7A72]">
+              <span className="text-[11px] font-sans text-[#6B7A72]">
                 {catalogo.length} artículos
               </span>
             </div>
@@ -601,9 +491,9 @@ export function PuntoDeVenta({
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-[11px] text-[#6B7A72]">{prod.sku}</span>
+                          <span className="font-sans text-[11px] text-[#6B7A72]">{prod.sku}</span>
                           {prod.codigo_barras && (
-                            <span className="font-mono text-[10px] text-[#6B7A72]/80 bg-[#FAFAF7] border border-[#E7E5DF] px-1 rounded-[3px]">
+                            <span className="font-sans text-[10px] text-[#6B7A72]/80 bg-[#FAFAF7] border border-[#E7E5DF] px-1 rounded-[3px]">
                               {prod.codigo_barras}
                             </span>
                           )}
@@ -615,7 +505,7 @@ export function PuntoDeVenta({
 
                       <div className="text-right flex items-center gap-4">
                         <div>
-                          <div className="text-[14px] font-bold font-mono text-[#16201C] tabular-nums">
+                          <div className="text-[14px] font-bold font-sans text-[#16201C] tabular-nums">
                             S/ {prod.precio.toFixed(2)}
                           </div>
                           <div className="text-[11px] text-[#6B7A72] flex items-center justify-end gap-1">
@@ -654,7 +544,7 @@ export function PuntoDeVenta({
               <ShoppingCart size={16} />
               <h3 className="text-[14px] font-bold">Orden de Venta Actual</h3>
             </div>
-            <span className="font-mono text-[12px] text-[#6B7A72] tabular-nums">
+            <span className="font-sans text-[12px] text-[#6B7A72] tabular-nums">
               {carrito.reduce((acc, c) => acc + c.cantidad, 0)} ítems
             </span>
           </div>
@@ -669,45 +559,11 @@ export function PuntoDeVenta({
 
           {/* Modal / Panel de Éxito de Venta */}
           {ventaExitosa ? (
-            <div className="p-6 my-auto text-center space-y-4 animate-fade-in">
-              <div className="w-12 h-12 rounded-full bg-[#E8F5E9] text-[#2E7D32] flex items-center justify-center mx-auto border border-[#C8E6C9]">
-                <CheckCircle2 size={24} />
-              </div>
-              <div>
-                <h4 className="text-[18px] font-bold text-[#16201C]">¡Venta Registrada con Éxito!</h4>
-                <p className="text-[13px] text-[#6B7A72] mt-1">
-                  Comprobante N°{' '}
-                  <span className="font-mono font-bold text-[#16201C]">
-                    {ventaExitosa.numero_comprobante}
-                  </span>
-                </p>
-                <div className="text-[28px] font-bold font-mono text-[#16201C] tabular-nums mt-3">
-                  S/ {Number(ventaExitosa.total || 0).toFixed(2)}
-                </div>
-
-                {ventaExitosa.vuelto !== undefined && (
-                  <div className="mt-3 inline-block text-[13px] font-mono font-bold text-emerald-800 bg-emerald-50 px-3 py-1.5 rounded-[6px] border border-emerald-200">
-                    Vuelto Entregado: S/ {ventaExitosa.vuelto.toFixed(2)}
-                  </div>
-                )}
-
-                {metodoPago === 'CULQI' && (
-                  <div className="mt-2 inline-block text-[11px] font-mono font-medium text-[#2E7D32] bg-[#E8F5E9] px-2.5 py-1 rounded-[4px] border border-[#C8E6C9]">
-                    Transacción Aprobada vía Culqi Gateway
-                  </div>
-                )}
-              </div>
-              <p className="text-[12px] text-[#6B7A72]">
-                El stock se ha descontado automáticamente de la base de datos y se registró la salida en el Kardex.
-              </p>
-              <button
-                type="button"
-                onClick={nuevaVenta}
-                className="w-full py-2.5 px-4 rounded-[6px] bg-[#16201C] hover:bg-[#2A3B34] text-white text-[13px] font-medium transition-colors cursor-pointer"
-              >
-                Iniciar Nueva Venta
-              </button>
-            </div>
+            <PosVentaExitosa
+              venta={ventaExitosa}
+              metodoPago={metodoPago}
+              onNuevaVenta={nuevaVenta}
+            />
           ) : (
             <>
               {/* Lista de ítems en carrito */}
@@ -726,7 +582,7 @@ export function PuntoDeVenta({
                         <h5 className="text-[13px] font-medium text-[#16201C] truncate">
                           {item.nombre}
                         </h5>
-                        <span className="font-mono text-[11px] text-[#6B7A72]">
+                        <span className="font-sans text-[11px] text-[#6B7A72]">
                           S/ {item.precio.toFixed(2)} c/u
                         </span>
                       </div>
@@ -746,7 +602,7 @@ export function PuntoDeVenta({
                           max={item.stock}
                           value={item.cantidad}
                           onChange={(e) => fijarCantidad(item.id, parseInt(e.target.value) || 1)}
-                          className="font-mono text-[12px] font-bold tabular-nums w-11 text-center border border-[#E7E5DF] rounded-[4px] py-0.5 focus:outline-none focus:border-[#16201C] bg-white"
+                          className="font-sans text-[12px] font-bold tabular-nums w-11 text-center border border-[#E7E5DF] rounded-[4px] py-0.5 focus:outline-none focus:border-[#16201C] bg-white"
                         />
                         <button
                           type="button"
@@ -758,7 +614,7 @@ export function PuntoDeVenta({
                       </div>
 
                       <div className="text-right pl-2">
-                        <span className="font-mono text-[13px] font-bold text-[#16201C] tabular-nums">
+                        <span className="font-sans text-[13px] font-bold text-[#16201C] tabular-nums">
                           S/ {(item.precio * item.cantidad).toFixed(2)}
                         </span>
                         <button
@@ -821,7 +677,7 @@ export function PuntoDeVenta({
                           <CreditCard size={14} />
                           <span>Tarjeta con Culqi Online</span>
                         </span>
-                        <span className="text-[10px] uppercase font-mono px-1 rounded bg-[#E8A33D]/20 text-[#16201C]">
+                        <span className="text-[10px] uppercase font-sans px-1 rounded bg-[#E8A33D]/20 text-[#16201C]">
                           Activo
                         </span>
                       </button>
@@ -850,7 +706,7 @@ export function PuntoDeVenta({
 
                     <div className="flex gap-2">
                       <div className="relative flex-1">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[12px] font-mono text-[#6B7A72]">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[12px] font-sans text-[#6B7A72]">
                           S/
                         </span>
                         <input
@@ -860,7 +716,7 @@ export function PuntoDeVenta({
                           value={montoRecibido}
                           onChange={(e) => setMontoRecibido(e.target.value)}
                           placeholder="0.00"
-                          className="w-full pl-7 pr-3 py-1.5 text-[14px] font-mono font-bold text-[#16201C] border border-[#E7E5DF] rounded-[5px] focus:outline-none focus:border-[#16201C]"
+                          className="w-full pl-7 pr-3 py-1.5 text-[14px] font-sans font-bold text-[#16201C] border border-[#E7E5DF] rounded-[5px] focus:outline-none focus:border-[#16201C]"
                         />
                       </div>
                       <button
@@ -879,7 +735,7 @@ export function PuntoDeVenta({
                           key={billete}
                           type="button"
                           onClick={() => setMontoRecibido(billete.toString())}
-                          className="py-1 px-1.5 text-center text-[11px] font-mono font-bold bg-[#FAFAF7] hover:bg-[#16201C] hover:text-white border border-[#E7E5DF] rounded-[4px] transition-colors cursor-pointer"
+                          className="py-1 px-1.5 text-center text-[11px] font-sans font-bold bg-[#FAFAF7] hover:bg-[#16201C] hover:text-white border border-[#E7E5DF] rounded-[4px] transition-colors cursor-pointer"
                         >
                           S/ {billete}
                         </button>
@@ -892,12 +748,12 @@ export function PuntoDeVenta({
                         {recibidoNum >= total ? (
                           <div className="p-2 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[12px] font-bold flex items-center justify-between">
                             <span>Vuelto a entregar:</span>
-                            <span className="font-mono text-[14px]">S/ {vuelto.toFixed(2)}</span>
+                            <span className="font-sans text-[14px]">S/ {vuelto.toFixed(2)}</span>
                           </div>
                         ) : (
                           <div className="p-2 rounded bg-rose-50 border border-rose-200 text-rose-700 text-[12px] font-semibold flex items-center justify-between">
                             <span>Falta cobrar:</span>
-                            <span className="font-mono text-[13px]">S/ {falta.toFixed(2)}</span>
+                            <span className="font-sans text-[13px]">S/ {falta.toFixed(2)}</span>
                           </div>
                         )}
                       </div>
@@ -909,17 +765,17 @@ export function PuntoDeVenta({
                 <div className="pt-2 border-t border-[#E7E5DF] space-y-1">
                   <div className="flex justify-between text-[12px] text-[#6B7A72]">
                     <span>Subtotal Imponible:</span>
-                    <span className="font-mono tabular-nums">S/ {(total / 1.18).toFixed(2)}</span>
+                    <span className="font-sans tabular-nums">S/ {(total / 1.18).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-[12px] text-[#6B7A72]">
                     <span>IGV (18%):</span>
-                    <span className="font-mono tabular-nums">
+                    <span className="font-sans tabular-nums">
                       S/ {(total - total / 1.18).toFixed(2)}
                     </span>
                   </div>
                   <div className="flex justify-between text-[16px] font-bold text-[#16201C] pt-1 border-t border-[#E7E5DF]">
                     <span>Total a Pagar:</span>
-                    <span className="font-mono tabular-nums">S/ {total.toFixed(2)}</span>
+                    <span className="font-sans tabular-nums">S/ {total.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -946,251 +802,20 @@ export function PuntoDeVenta({
       </div>
 
       {/* ===== MODAL 1: ESCÁNER DE CÁMARA PARA CELULARES ===== */}
-      {isCameraOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
-          <div className="bg-white rounded-[10px] max-w-md w-full overflow-hidden border border-[#E7E5DF] shadow-2xl">
-            <div className="p-4 bg-[#16201C] text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Camera size={16} />
-                <h4 className="text-[14px] font-bold">Lector Óptico de Código de Barras</h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCameraOpen(false)}
-                className="text-gray-300 hover:text-white p-1"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="p-4 space-y-3">
-              <div className="relative bg-black rounded-[8px] overflow-hidden aspect-4/3 flex items-center justify-center">
-                <video
-                  ref={videoRef}
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
-
-                {/* Mira óptica de escaneo */}
-                <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-                  <div className="w-56 h-32 border-2 border-emerald-400 rounded-[6px] relative shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]">
-                    <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-rose-500 animate-pulse" />
-                  </div>
-                  <span className="text-white text-[11px] font-mono mt-3 bg-black/60 px-2 py-0.5 rounded">
-                    Apunta la cámara a la etiqueta del producto
-                  </span>
-                </div>
-              </div>
-
-              {cameraError && (
-                <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-[12px] rounded-[6px]">
-                  {cameraError}
-                </div>
-              )}
-
-              {/* Opción alternativa: ingresar código a mano si la cámara falla */}
-              <div className="pt-2 border-t border-[#E7E5DF]">
-                <label className="block text-[11px] text-[#6B7A72] font-semibold mb-1 uppercase">
-                  O escribe el código de barras manualmente:
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    id="manual-barcode-input"
-                    placeholder="Ej. 7750123456789"
-                    className="flex-1 px-3 py-1.5 text-[13px] border border-[#E7E5DF] rounded-[6px] focus:outline-none focus:border-[#16201C]"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        const val = (e.target as HTMLInputElement).value
-                        if (val) {
-                          buscarYAgregarPorCodigo(val)
-                          setIsCameraOpen(false)
-                        }
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const input = document.getElementById(
-                        'manual-barcode-input'
-                      ) as HTMLInputElement | null
-                      if (input?.value) {
-                        buscarYAgregarPorCodigo(input.value)
-                        setIsCameraOpen(false)
-                      }
-                    }}
-                    className="px-3 py-1.5 bg-[#16201C] text-white text-[12px] font-medium rounded-[6px]"
-                  >
-                    Agregar
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-3 bg-[#FAFAF7] border-t border-[#E7E5DF] flex justify-end">
-              <button
-                type="button"
-                onClick={() => setIsCameraOpen(false)}
-                className="px-4 py-1.5 text-[13px] text-[#16201C] hover:bg-[#E7E5DF] rounded-[6px] font-medium transition-colors"
-              >
-                Cerrar Cámara
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <PosCameraModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onScan={buscarYAgregarPorCodigo}
+      />
 
       {/* ===== MODAL 2: ARQUEO DE CAJA Y CIERRE DE TURNO ===== */}
-      {isArqueoOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-[10px] max-w-lg w-full overflow-hidden border border-[#E7E5DF] shadow-2xl">
-            <div className="p-4 bg-[#16201C] text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Calculator size={18} />
-                <h4 className="text-[15px] font-bold">Arqueo de Caja y Cierre de Turno</h4>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsArqueoOpen(false)}
-                className="text-gray-300 hover:text-white p-1"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
-              {isLoadingResumen ? (
-                <div className="py-10 text-center text-[#6B7A72]">
-                  <Loader2 size={24} className="animate-spin mx-auto mb-2 text-[#16201C]" />
-                  <p className="text-[13px]">Calculando ventas del turno...</p>
-                </div>
-              ) : (
-                <>
-                  {/* Resumen del Sistema */}
-                  <div className="grid grid-cols-2 gap-3 p-3.5 bg-[#FAFAF7] border border-[#E7E5DF] rounded-[8px]">
-                    <div>
-                      <span className="text-[11px] uppercase tracking-wider text-[#6B7A72] font-semibold block">
-                        Efectivo Esperado en Caja
-                      </span>
-                      <span className="text-[20px] font-bold font-mono text-[#16201C] tabular-nums">
-                        S/ {resumenCaja?.totalEfectivo.toFixed(2) || '0.00'}
-                      </span>
-                    </div>
-
-                    <div>
-                      <span className="text-[11px] uppercase tracking-wider text-[#6B7A72] font-semibold block">
-                        Ventas Digitales (Yape/Culqi)
-                      </span>
-                      <span className="text-[20px] font-bold font-mono text-[#2E7D32] tabular-nums">
-                        S/ {resumenCaja?.totalDigital.toFixed(2) || '0.00'}
-                      </span>
-                    </div>
-
-                    <div className="col-span-2 pt-2 border-t border-[#E7E5DF] flex justify-between text-[12px] text-[#6B7A72]">
-                      <span>
-                        Total Cobrado en Turno: S/{' '}
-                        <strong>{resumenCaja?.totalVentas.toFixed(2) || '0.00'}</strong>
-                      </span>
-                      <span>
-                        Transacciones: <strong>{resumenCaja?.cantidadVentas || 0}</strong>
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Input de Efectivo Contado Físico */}
-                  <div>
-                    <label className="block text-[12px] font-bold text-[#16201C] mb-1">
-                      Efectivo Físico Contado en Gaveta (S/)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={efectivoContado}
-                      onChange={(e) => setEfectivoContado(e.target.value)}
-                      placeholder="Ingresa el monto contado..."
-                      className="w-full px-3.5 py-2 text-[16px] font-mono font-bold border border-[#E7E5DF] rounded-[6px] focus:outline-none focus:border-[#16201C]"
-                    />
-                  </div>
-
-                  {/* Diferencia en vivo */}
-                  {efectivoContado !== '' && (
-                    <div>
-                      {Math.abs(diferenciaArqueo) < 0.01 ? (
-                        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-[6px] text-[13px] font-bold flex items-center gap-2">
-                          <CheckCircle2 size={16} />
-                          <span>¡La caja cuadra perfecto! Sin faltantes ni sobrantes.</span>
-                        </div>
-                      ) : diferenciaArqueo < 0 ? (
-                        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-[6px] text-[13px] font-bold flex items-center justify-between">
-                          <span>Faltante en caja:</span>
-                          <span className="font-mono text-[14px]">
-                            - S/ {Math.abs(diferenciaArqueo).toFixed(2)}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-[6px] text-[13px] font-bold flex items-center justify-between">
-                          <span>Sobrante en caja:</span>
-                          <span className="font-mono text-[14px]">
-                            + S/ {diferenciaArqueo.toFixed(2)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Notas u observaciones */}
-                  <div>
-                    <label className="block text-[12px] font-medium text-[#16201C] mb-1">
-                      Observaciones del Turno (Opcional)
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={notasArqueo}
-                      onChange={(e) => setNotasArqueo(e.target.value)}
-                      placeholder="Ej. Se dejaron S/ 50.00 de sencillo de inicio para el siguiente turno..."
-                      className="w-full px-3 py-2 text-[12px] border border-[#E7E5DF] rounded-[6px] focus:outline-none focus:border-[#16201C]"
-                    />
-                  </div>
-
-                  {arqueoResultado && (
-                    <div className="p-3 bg-blue-50 border border-blue-200 text-blue-900 rounded-[6px] text-[13px] font-medium">
-                      {arqueoResultado}
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            <div className="p-4 bg-[#FAFAF7] border-t border-[#E7E5DF] flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setIsArqueoOpen(false)}
-                className="px-4 py-2 text-[13px] font-medium text-[#16201C] hover:bg-[#E7E5DF] rounded-[6px] transition-colors cursor-pointer"
-              >
-                Cerrar
-              </button>
-              <button
-                type="button"
-                disabled={isSubmittingArqueo || efectivoContado === ''}
-                onClick={handleGuardarArqueo}
-                className="px-4 py-2 text-[13px] font-medium bg-[#16201C] hover:bg-[#2A3B34] text-white rounded-[6px] disabled:opacity-40 transition-colors flex items-center gap-2 cursor-pointer"
-              >
-                {isSubmittingArqueo ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>Guardando en auditoría...</span>
-                  </>
-                ) : (
-                  <span>Registrar Cierre en Auditoría</span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <PosArqueoCajaModal
+        isOpen={isArqueoOpen}
+        onClose={() => setIsArqueoOpen(false)}
+        resumenCaja={resumenCaja}
+        isLoadingResumen={isLoadingResumen}
+        onError={(msg) => setErrorMsg(msg)}
+      />
     </div>
   )
 }

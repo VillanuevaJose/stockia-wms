@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createClient } from '../supabase/server'
-import { createAdminClient } from '../supabase/admin'
 
 const crearSolicitudSchema = z.object({
   sede_origen_id: z.string().uuid('Selecciona la sede emisora válida'),
@@ -46,8 +45,7 @@ export async function crearSolicitudSedesAction(
     return { success: false, error: 'Usuario no asignado a ninguna empresa.' }
   }
 
-  const adminClient = createAdminClient()
-  const { data: newRow, error } = await adminClient
+  const { data: newRow, error } = await supabase
     .from('solicitud_traslado')
     .insert({
       negocio_id: usuario.negocio_id,
@@ -90,10 +88,8 @@ export async function responderSolicitudSedesAction(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Sesión no válida o expirada.' }
 
-  const adminClient = createAdminClient()
-
   // 1. Obtener la solicitud actual para conocer productos y sedes
-  const { data: sol, error: fetchErr } = await adminClient
+  const { data: sol, error: fetchErr } = await supabase
     .from('solicitud_traslado')
     .select('id, negocio_id, sede_origen_id, sede_destino_id, producto_id, cantidad, estado')
     .eq('id', validated.data.solicitud_id)
@@ -110,7 +106,7 @@ export async function responderSolicitudSedesAction(
     }
 
     if (sol.producto_id && Number(sol.cantidad) > 0) {
-      const { error: rpcErr } = await adminClient.rpc('registrar_movimiento', {
+      const { error: rpcErr } = await supabase.rpc('registrar_movimiento', {
         p_negocio_id: sol.negocio_id,
         p_usuario_id: user.id,
         p_tipo: 'SALIDA',
@@ -145,7 +141,7 @@ export async function responderSolicitudSedesAction(
     }
 
     if (sol.producto_id && Number(sol.cantidad) > 0) {
-      const { error: rpcErr } = await adminClient.rpc('registrar_movimiento', {
+      const { error: rpcErr } = await supabase.rpc('registrar_movimiento', {
         p_negocio_id: sol.negocio_id,
         p_usuario_id: user.id,
         p_tipo: 'ENTRADA',
@@ -174,7 +170,7 @@ export async function responderSolicitudSedesAction(
   }
 
   // 4. Actualizar estado de la solicitud en la base de datos
-  const { error } = await adminClient
+  const { error } = await supabase
     .from('solicitud_traslado')
     .update({
       estado: validated.data.nuevo_estado,
@@ -202,10 +198,8 @@ export async function anularSolicitudSedesAction(solicitudId: string): Promise<S
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { success: false, error: 'Sesión no válida.' }
 
-  const adminClient = createAdminClient()
-
   // Verificar que la solicitud esté PENDIENTE antes de anular
-  const { data: sol, error: fetchErr } = await adminClient
+  const { data: sol, error: fetchErr } = await supabase
     .from('solicitud_traslado')
     .select('id, estado')
     .eq('id', solicitudId)
@@ -222,7 +216,7 @@ export async function anularSolicitudSedesAction(solicitudId: string): Promise<S
     }
   }
 
-  const { error: delErr } = await adminClient
+  const { error: delErr } = await supabase
     .from('solicitud_traslado')
     .delete()
     .eq('id', solicitudId)

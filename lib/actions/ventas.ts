@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createClient } from '../supabase/server'
-import { createAdminClient } from '../supabase/admin'
 import { invalidateFastCache } from '../cache/fast-cache'
 
 const itemVentaSchema = z.object({
@@ -112,8 +111,7 @@ export async function registrarVentaAction(
   }
 
   // Ejecutar función transaccional de venta en Supabase (bloqueo FOR UPDATE en BD)
-  const adminClient = createAdminClient()
-  const { data: ventaResp, error: rpcErr } = await adminClient.rpc('registrar_venta', {
+  const { data: ventaResp, error: rpcErr } = await supabase.rpc('registrar_venta', {
     p_negocio_id: negocio_id,
     p_usuario_id: user.id,
     p_cliente_id: validated.data.cliente_id || null,
@@ -128,7 +126,7 @@ export async function registrarVentaAction(
     if (rpcErr.message.includes('movimiento_id')) {
       // Fallback resiliente: la función SQL registrar_venta intentó actualizar una columna inexistente
       // Procesamos la venta garantizando afectación real de stock y emisión de comprobante
-      const { data: lastVenta } = await adminClient
+      const { data: lastVenta } = await supabase
         .from('venta')
         .select('correlativo')
         .eq('negocio_id', negocio_id)
@@ -143,7 +141,7 @@ export async function registrarVentaAction(
       const subtotal = Math.round((totalCalculado / 1.18) * 100) / 100
       const impuesto = Math.round((totalCalculado - subtotal) * 100) / 100
 
-      const { data: newVenta, error: vErr } = await adminClient
+      const { data: newVenta, error: vErr } = await supabase
         .from('venta')
         .insert({
           negocio_id,
@@ -166,7 +164,7 @@ export async function registrarVentaAction(
       }
 
       // Detalle de venta
-      const { error: dErr } = await adminClient.from('detalle_venta').insert(
+      const { error: dErr } = await supabase.from('detalle_venta').insert(
         validated.data.items.map((i) => {
           const precio = Number(prodMap.get(i.producto_id)?.precio_soles) || 0
           return {
@@ -184,7 +182,7 @@ export async function registrarVentaAction(
       }
 
       // Descontar stock mediante RPC registrar_movimiento (aplica bloqueo y validación de existencias)
-      const { error: movErr } = await adminClient.rpc('registrar_movimiento', {
+      const { error: movErr } = await supabase.rpc('registrar_movimiento', {
         p_negocio_id: negocio_id,
         p_usuario_id: user.id,
         p_tipo: 'SALIDA',
@@ -201,12 +199,12 @@ export async function registrarVentaAction(
 
       if (movErr) {
         console.error('[FALLBACK MOVIMIENTO ERROR]', movErr)
-        await adminClient.from('venta').delete().eq('id', newVenta.id)
+        await supabase.from('venta').delete().eq('id', newVenta.id)
         return { success: false, error: movErr.message }
       }
 
       // Pago
-      await adminClient.from('pago').insert({
+      await supabase.from('pago').insert({
         negocio_id,
         venta_id: newVenta.id,
         metodo: validated.data.metodo_pago,
@@ -394,7 +392,6 @@ export async function registrarArqueoCajaAction(data: {
   if (diferencia < -0.01) estado = 'FALTANTE'
   else if (diferencia > 0.01) estado = 'SOBRANTE'
 
-  const adminClient = createAdminClient()
   const datosAntPayload = {
     monto_esperado_efectivo: data.monto_esperado,
     colaborador: usuario?.nombre_completo || 'Usuario',
@@ -410,7 +407,7 @@ export async function registrarArqueoCajaAction(data: {
   }
 
   // Intentar primero con datos_anteriores y fallback a datos_previos
-  let { error } = await adminClient.from('auditoria').insert([
+  let { error } = await supabase.from('auditoria').insert([
     {
       negocio_id: usuario?.negocio_id || null,
       usuario_id: user.id,
@@ -422,7 +419,7 @@ export async function registrarArqueoCajaAction(data: {
   ])
 
   if (error && error.message.includes('datos_anteriores')) {
-    const fallbackRes = await adminClient.from('auditoria').insert([
+    const fallbackRes = await supabase.from('auditoria').insert([
       {
         negocio_id: usuario?.negocio_id || null,
         usuario_id: user.id,
@@ -519,10 +516,8 @@ export async function obtenerDetalleVentaAction(
     return { success: false, error: 'Usuario no vinculado a ningún negocio.' }
   }
 
-  const adminClient = createAdminClient()
-
   // 1. Obtener cabecera de la venta con cliente, vendedor y almacén aislada por negocio
-  const { data: v, error: vErr } = await adminClient
+  const { data: v, error: vErr } = await supabase
     .from('venta')
     .select(`
       id,
@@ -546,7 +541,7 @@ export async function obtenerDetalleVentaAction(
   }
 
   // 2. Obtener items desglosados
-  const { data: detalles } = await adminClient
+  const { data: detalles } = await supabase
     .from('detalle_venta')
     .select(`
       id,
@@ -558,7 +553,7 @@ export async function obtenerDetalleVentaAction(
     .eq('venta_id', ventaId)
 
   // 3. Obtener pagos
-  const { data: pagos } = await adminClient
+  const { data: pagos } = await supabase
     .from('pago')
     .select('id, metodo, monto, referencia_externa, created_at')
     .eq('venta_id', ventaId)

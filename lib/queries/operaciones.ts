@@ -43,7 +43,7 @@ export async function getInventarioFisico(): Promise<{
       .select('id, sku, nombre, costo, precio_soles, stock, stock_minimo, categoria:categoria_id (nombre)')
       .eq('activo', true)
 
-    const prodsAsInventario: InventarioFisicoRow[] = ((prods || []) as unknown as Array<{
+    interface RawProdFallback {
       id: string
       sku?: string
       nombre: string
@@ -52,7 +52,9 @@ export async function getInventarioFisico(): Promise<{
       stock?: number
       stock_minimo?: number
       categoria?: { nombre?: string } | { nombre?: string }[]
-    }>).map((p, idx: number) => {
+    }
+
+    const prodsAsInventario: InventarioFisicoRow[] = ((prods || []) as RawProdFallback[]).map((p, idx: number) => {
       const stock = Number(p.stock) || 0
       const stockMin = Number(p.stock_minimo) || 0
       const costo = Number(p.costo) > 0 ? Number(p.costo) : Number(p.precio_soles) || 0
@@ -110,7 +112,7 @@ export async function getInventarioFisico(): Promise<{
   }
 
   // Filtrar registros cuyo producto está desactivado
-  const activeInvData = (invData as unknown as RawInventarioQueryRow[]).filter((row) => {
+  const activeInvData = (invData as RawInventarioQueryRow[]).filter((row) => {
     const prod = Array.isArray(row.producto) ? row.producto[0] : row.producto
     return prod?.activo !== false
   })
@@ -184,7 +186,7 @@ export async function getCategoriasList(): Promise<CategoriaDetailRow[]> {
       productos?: { id: string }[]
     }
 
-    return (categorias as unknown as RawCatDb[]).map((c) => ({
+    return (categorias as RawCatDb[]).map((c) => ({
       id: c.id,
       nombre: c.nombre,
       descripcion: c.descripcion,
@@ -241,7 +243,7 @@ export async function getVentasList(): Promise<VentaRow[]> {
       usuario?: { nombre_completo?: string } | { nombre_completo?: string }[]
     }
 
-    return (ventas as unknown as RawVentaDb[]).map((v) => ({
+    return (ventas as RawVentaDb[]).map((v) => ({
       id: v.id,
       numero_comprobante: `${v.serie}-${String(v.correlativo).padStart(8, '0')}`,
       cliente_nombre: Array.isArray(v.cliente)
@@ -302,7 +304,7 @@ export async function getComprasList(): Promise<CompraRow[]> {
       usuario?: { nombre_completo?: string } | { nombre_completo?: string }[]
     }
 
-    return (compras as unknown as RawCompraDb[]).map((c) => ({
+    return (compras as RawCompraDb[]).map((c) => ({
       id: c.id,
       numero_factura: c.numero_comprobante,
       proveedor_nombre: Array.isArray(c.proveedor)
@@ -410,17 +412,19 @@ export async function getUsuariosList(): Promise<UsuarioRow[]> {
         .select('id, nombre_completo, email, rol, activo, created_at, almacen_id, almacen:almacen_id(id, nombre, codigo)')
         .order('created_at', { ascending: false })
 
+      interface RawUsuarioDb {
+        id: string
+        nombre_completo: string
+        email: string
+        rol: 'admin' | 'almacenero' | 'vendedor'
+        activo: boolean
+        created_at: string
+        almacen_id?: string | null
+        almacen?: { id: string; nombre: string; codigo: string | null } | { id: string; nombre: string; codigo: string | null }[] | null
+      }
+
       if (!error && usuarios) {
-        return (usuarios as unknown as Array<{
-          id: string
-          nombre_completo: string
-          email: string
-          rol: 'admin' | 'almacenero' | 'vendedor'
-          activo: boolean
-          created_at: string
-          almacen_id?: string | null
-          almacen?: { id: string; nombre: string; codigo: string | null } | { id: string; nombre: string; codigo: string | null }[] | null
-        }>).map((u) => {
+        return (usuarios as RawUsuarioDb[]).map((u) => {
           const authInfo = authMap.get(u.id)
           // Un usuario está pendiente si fue invitado y aún no ha definido su contraseña
           const isPending = Boolean(authInfo?.invited_at && !authInfo?.password_set)

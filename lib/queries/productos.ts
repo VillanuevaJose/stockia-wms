@@ -42,6 +42,7 @@ export async function getProductos(filtros: FiltrosProductos = {}) {
       stock_minimo,
       stock,
       activo,
+      imagen_url,
       created_at,
       updated_at,
       categoria:categoria_id (id, nombre),
@@ -79,18 +80,21 @@ export async function getProductos(filtros: FiltrosProductos = {}) {
     }
   }
 
-  let finalData = ((data || []) as unknown as Array<
-    ProductoRow & { inventario?: { stock_actual: number }[] }
-  >).map((p) => {
-    const invList = Array.isArray(p.inventario) ? p.inventario : []
+  let finalData: ProductoRow[] = ((data || []) as unknown as Record<string, unknown>[]).map((p) => {
+    const invList = Array.isArray(p.inventario) ? (p.inventario as { stock_actual?: number }[]) : []
     const stockInventario = invList.reduce((acc, item) => acc + (Number(item.stock_actual) || 0), 0)
     const stockReal = invList.length > 0 ? stockInventario : Number(p.stock) || 0
+    const cat = Array.isArray(p.categoria) ? p.categoria[0] : p.categoria
+    const uni = Array.isArray(p.unidad_medida) ? p.unidad_medida[0] : p.unidad_medida
+
     return {
-      ...p,
+      ...(p as unknown as ProductoRow),
+      categoria: (cat as { id: string; nombre: string } | null) || null,
+      unidad_medida: (uni as { id: string; codigo: string; nombre: string } | null) || null,
       stock: stockReal,
       precio_venta: Number(p.precio_venta) || Number(p.precio_soles) || 0,
-      created_at: p.created_at,
-      fecha_creacion: p.created_at,
+      created_at: String(p.created_at || ''),
+      fecha_creacion: String(p.created_at || ''),
     }
   })
 
