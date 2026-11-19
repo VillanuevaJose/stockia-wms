@@ -143,7 +143,12 @@ export function ProductoDrawer({
                   ref={barcodeInputRef}
                   defaultValue={productoEditar?.codigo_barras || ''}
                   placeholder="7751234000018"
-                  className="flex-1 min-w-0 px-2.5 py-1.5 text-xs font-mono bg-white border border-[#E7E5DF] rounded-[6px] focus:border-[#16201C] focus:ring-1 focus:ring-[#E8A33D] focus:outline-none"
+                  aria-invalid={!!state?.fieldErrors?.codigo_barras}
+                  className={`flex-1 min-w-0 px-2.5 py-1.5 text-xs font-mono bg-white border rounded-[6px] focus:outline-none ${
+                    state?.fieldErrors?.codigo_barras
+                      ? 'border-[#C93B3B] focus:border-[#C93B3B] focus:ring-1 focus:ring-[#C93B3B]'
+                      : 'border-[#E7E5DF] focus:border-[#16201C] focus:ring-1 focus:ring-[#E8A33D]'
+                  }`}
                 />
                 <button
                   type="button"
@@ -155,6 +160,9 @@ export function ProductoDrawer({
                 </button>
               </div>
               <p className="text-[11px] text-[#6B7A72] mt-0.5">Lectura óptica para escáner</p>
+              {state?.fieldErrors?.codigo_barras && (
+                <p role="alert" className="text-[11px] text-[#C93B3B] mt-0.5">{state.fieldErrors.codigo_barras}</p>
+              )}
             </div>
           </div>
 
@@ -234,7 +242,7 @@ export function ProductoDrawer({
           <div className="grid grid-cols-3 gap-3 p-3 bg-[#FAFAF7] border border-[#E7E5DF] rounded-[6px]">
             <div>
               <label className="block text-[11px] font-semibold text-[#16201C] mb-1">
-                Costo (S/)
+                Costo (S/) *
               </label>
               <input
                 type="number"
@@ -243,30 +251,50 @@ export function ProductoDrawer({
                 name="costo"
                 required
                 defaultValue={productoEditar?.costo ?? 0}
-                className="w-full px-2 py-1 text-xs font-mono text-right bg-white border border-[#E7E5DF] rounded-[4px] focus:border-[#16201C] focus:outline-none tabular-nums"
+                aria-invalid={!!state?.fieldErrors?.costo}
+                className={`w-full px-2 py-1 text-xs font-mono text-right bg-white border rounded-[4px] focus:outline-none tabular-nums ${
+                  state?.fieldErrors?.costo
+                    ? 'border-[#C93B3B] focus:border-[#C93B3B]'
+                    : 'border-[#E7E5DF] focus:border-[#16201C]'
+                }`}
               />
               <span className="text-[10px] text-[#6B7A72] block mt-0.5">Adquisición</span>
+              {state?.fieldErrors?.costo && (
+                <p role="alert" className="text-[10px] text-[#C93B3B] mt-0.5 font-medium leading-tight">
+                  {state.fieldErrors.costo}
+                </p>
+              )}
             </div>
 
             <div>
               <label className="block text-[11px] font-semibold text-[#16201C] mb-1">
-                Precio (S/)
+                Precio (S/) *
               </label>
               <input
                 type="number"
                 step="0.01"
-                min="0"
+                min="0.01"
                 name="precio_venta"
                 required
                 defaultValue={productoEditar?.precio_venta ?? productoEditar?.precio_soles ?? 0}
-                className="w-full px-2 py-1 text-xs font-mono text-right bg-white border border-[#E7E5DF] rounded-[4px] focus:border-[#16201C] focus:outline-none tabular-nums font-semibold"
+                aria-invalid={!!state?.fieldErrors?.precio_venta}
+                className={`w-full px-2 py-1 text-xs font-mono text-right bg-white border rounded-[4px] focus:outline-none tabular-nums font-semibold ${
+                  state?.fieldErrors?.precio_venta
+                    ? 'border-[#C93B3B] focus:border-[#C93B3B]'
+                    : 'border-[#E7E5DF] focus:border-[#16201C]'
+                }`}
               />
               <span className="text-[10px] text-[#6B7A72] block mt-0.5">Venta público</span>
+              {state?.fieldErrors?.precio_venta && (
+                <p role="alert" className="text-[10px] text-[#C93B3B] mt-0.5 font-medium leading-tight">
+                  {state.fieldErrors.precio_venta}
+                </p>
+              )}
             </div>
 
             <div>
               <label className="block text-[11px] font-semibold text-[#16201C] mb-1">
-                Stock Mín.
+                Stock Mín. *
               </label>
               <input
                 type="number"
@@ -275,9 +303,19 @@ export function ProductoDrawer({
                 name="stock_minimo"
                 required
                 defaultValue={productoEditar?.stock_minimo ?? 5}
-                className="w-full px-2 py-1 text-xs font-mono text-right bg-white border border-[#E7E5DF] rounded-[4px] focus:border-[#16201C] focus:outline-none tabular-nums"
+                aria-invalid={!!state?.fieldErrors?.stock_minimo}
+                className={`w-full px-2 py-1 text-xs font-mono text-right bg-white border rounded-[4px] focus:outline-none tabular-nums ${
+                  state?.fieldErrors?.stock_minimo
+                    ? 'border-[#C93B3B] focus:border-[#C93B3B]'
+                    : 'border-[#E7E5DF] focus:border-[#16201C]'
+                }`}
               />
               <span className="text-[10px] text-[#6B7A72] block mt-0.5">Umbral alerta</span>
+              {state?.fieldErrors?.stock_minimo && (
+                <p role="alert" className="text-[10px] text-[#C93B3B] mt-0.5 font-medium leading-tight">
+                  {state.fieldErrors.stock_minimo}
+                </p>
+              )}
             </div>
           </div>
 

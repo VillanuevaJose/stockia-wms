@@ -22,9 +22,9 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   },
 })
 
-const targetEmail = 'mateo.mesa@gmail.com'
-const targetPassword = '12345678aA*'
-const targetMetadata = { nombre_completo: 'Mesa Mateo' }
+const targetEmail = process.env.TEST_USER_EMAIL || process.argv[2] || 'admin@stockia.local'
+const targetPassword = process.env.TEST_USER_PASSWORD || process.argv[3] || 'AdminStockia2026*'
+const targetMetadata = { nombre_completo: process.env.TEST_USER_NAME || 'Administrador General' }
 
 async function main() {
   console.log(`Verificando usuario: ${targetEmail}...`)

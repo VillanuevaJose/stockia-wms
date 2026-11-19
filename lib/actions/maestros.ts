@@ -16,7 +16,12 @@ export async function crearCategoriaAction(prevState: unknown, formData: FormDat
 
   const validated = categoriaSchema.safeParse({ nombre, descripcion })
   if (!validated.success) {
-    return { success: false, error: validated.error.issues[0]?.message }
+    const fieldErrors: Record<string, string> = {}
+    validated.error.issues.forEach((issue) => {
+      const path = issue.path[0]
+      if (path) fieldErrors[String(path)] = issue.message
+    })
+    return { success: false, error: validated.error.issues[0]?.message, fieldErrors }
   }
 
   const supabase = await createClient()
@@ -66,7 +71,12 @@ export async function crearAlmacenAction(prevState: unknown, formData: FormData)
 
   const validated = almacenSchema.safeParse({ nombre, codigo, direccion })
   if (!validated.success) {
-    return { success: false, error: validated.error.issues[0]?.message }
+    const fieldErrors: Record<string, string> = {}
+    validated.error.issues.forEach((issue) => {
+      const path = issue.path[0]
+      if (path) fieldErrors[String(path)] = issue.message
+    })
+    return { success: false, error: validated.error.issues[0]?.message, fieldErrors }
   }
 
   const supabase = await createClient()

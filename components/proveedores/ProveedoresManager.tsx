@@ -51,6 +51,7 @@ export function ProveedoresManager({ proveedores }: Props) {
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [isPending, startTransition] = useTransition()
 
   const openNuevoDrawer = () => {
@@ -62,6 +63,7 @@ export function ProveedoresManager({ proveedores }: Props) {
     setFormEmail('')
     setFormDireccion('')
     setErrorMsg(null)
+    setFieldErrors({})
     setDrawerOpen(true)
   }
 
@@ -74,7 +76,105 @@ export function ProveedoresManager({ proveedores }: Props) {
     setFormEmail(item.email || '')
     setFormDireccion(item.direccion || '')
     setErrorMsg(null)
+    setFieldErrors({})
     setDrawerOpen(true)
+  }
+
+  const handleTelefonoChange = (val: string) => {
+    if (/[^\d\s\-\+]/.test(val)) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        telefono: 'Error: solo se permiten números en el teléfono.',
+      }))
+    } else {
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next.telefono
+        return next
+      })
+    }
+    const soloDigitos = val.replace(/\D/g, '').slice(0, 15)
+    setFormTelefono(soloDigitos)
+  }
+
+  const handleTelefonoBlur = () => {
+    if (formTelefono.trim() && formTelefono.trim().length < 7) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        telefono: 'El teléfono debe tener entre 7 y 15 dígitos numéricos.',
+      }))
+    }
+  }
+
+  const handleRucChange = (val: string) => {
+    if (/[^\d]/.test(val)) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        ruc: 'Error: el RUC solo debe contener números.',
+      }))
+    } else {
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next.ruc
+        return next
+      })
+    }
+    const soloDigitos = val.replace(/\D/g, '').slice(0, 11)
+    setFormRuc(soloDigitos)
+  }
+
+  const handleRucBlur = () => {
+    if (formRuc.trim() && formRuc.trim().length !== 11) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        ruc: 'El RUC debe tener exactamente 11 dígitos.',
+      }))
+    }
+  }
+
+  const handleRazonSocialChange = (val: string) => {
+    setFormRazonSocial(val)
+    if (val.trim().length >= 2) {
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next.razon_social
+        return next
+      })
+    }
+  }
+
+  const handleRazonSocialBlur = () => {
+    if (!formRazonSocial.trim()) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        razon_social: 'La razón social o nombre comercial es obligatoria.',
+      }))
+    } else if (formRazonSocial.trim().length < 2) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        razon_social: 'Debe tener al menos 2 caracteres.',
+      }))
+    }
+  }
+
+  const handleEmailChange = (val: string) => {
+    setFormEmail(val)
+    if (!val.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim())) {
+      setFieldErrors((prev) => {
+        const next = { ...prev }
+        delete next.email
+        return next
+      })
+    }
+  }
+
+  const handleEmailBlur = () => {
+    if (formEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formEmail.trim())) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        email: 'Ingresa un correo electrónico válido (ej. ventas@proveedor.pe).',
+      }))
+    }
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -82,15 +182,32 @@ export function ProveedoresManager({ proveedores }: Props) {
     setErrorMsg(null)
     setSuccessMsg(null)
 
+    const errors: Record<string, string> = {}
+
     if (!formRazonSocial.trim()) {
-      setErrorMsg('La razón social es obligatoria.')
+      errors.razon_social = 'La razón social es obligatoria.'
+    } else if (formRazonSocial.trim().length < 2) {
+      errors.razon_social = 'Debe tener al menos 2 caracteres.'
+    }
+
+    if (formRuc.trim() && formRuc.trim().length !== 11) {
+      errors.ruc = 'El RUC debe tener exactamente 11 dígitos numéricos.'
+    }
+
+    if (formTelefono.trim() && (formTelefono.trim().length < 7 || formTelefono.trim().length > 15)) {
+      errors.telefono = 'El teléfono debe tener entre 7 y 15 dígitos numéricos.'
+    }
+
+    if (formEmail.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formEmail.trim())) {
+      errors.email = 'Ingresa un formato de correo válido (ej. ventas@proveedor.pe).'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
       return
     }
 
-    if (formRuc.trim() && !/^\d{11}$/.test(formRuc.trim())) {
-      setErrorMsg('El RUC debe tener exactamente 11 dígitos numéricos.')
-      return
-    }
+    setFieldErrors({})
 
     startTransition(async () => {
       const payload = {
@@ -109,6 +226,7 @@ export function ProveedoresManager({ proveedores }: Props) {
           setDrawerOpen(false)
         } else {
           setErrorMsg(res.error || 'Error al actualizar el proveedor.')
+          if (res.fieldErrors) setFieldErrors(res.fieldErrors)
         }
       } else {
         const res = await crearProveedorAction(payload)
@@ -117,6 +235,7 @@ export function ProveedoresManager({ proveedores }: Props) {
           setDrawerOpen(false)
         } else {
           setErrorMsg(res.error || 'Error al crear el proveedor.')
+          if (res.fieldErrors) setFieldErrors(res.fieldErrors)
         }
       }
     })
@@ -400,7 +519,7 @@ export function ProveedoresManager({ proveedores }: Props) {
             </div>
 
             {/* Formulario */}
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
+            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4" noValidate>
               <div>
                 <label className="block text-[12px] font-semibold text-[#16201C] mb-1">
                   Razón Social o Nombre Comercial *
@@ -409,10 +528,21 @@ export function ProveedoresManager({ proveedores }: Props) {
                   type="text"
                   required
                   value={formRazonSocial}
-                  onChange={(e) => setFormRazonSocial(e.target.value)}
+                  onChange={(e) => handleRazonSocialChange(e.target.value)}
+                  onBlur={handleRazonSocialBlur}
+                  aria-invalid={!!fieldErrors.razon_social}
                   placeholder="Ej. Distribuidora Mayorista Los Andes S.A.C."
-                  className="w-full px-3 py-1.5 rounded-[6px] bg-white border border-[#E7E5DF] text-[13px] text-[#16201C] focus:outline-none focus:border-[#16201C]"
+                  className={`w-full px-3 py-1.5 rounded-[6px] bg-white border text-[13px] text-[#16201C] focus:outline-none ${
+                    fieldErrors.razon_social
+                      ? 'border-[#C93B3B] focus:border-[#C93B3B] focus:ring-1 focus:ring-[#C93B3B]'
+                      : 'border-[#E7E5DF] focus:border-[#16201C]'
+                  }`}
                 />
+                {fieldErrors.razon_social && (
+                  <p role="alert" className="mt-1 text-[11px] text-[#C93B3B] font-medium">
+                    {fieldErrors.razon_social}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -421,12 +551,24 @@ export function ProveedoresManager({ proveedores }: Props) {
                 </label>
                 <input
                   type="text"
+                  inputMode="numeric"
                   maxLength={11}
                   value={formRuc}
-                  onChange={(e) => setFormRuc(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => handleRucChange(e.target.value)}
+                  onBlur={handleRucBlur}
+                  aria-invalid={!!fieldErrors.ruc}
                   placeholder="20123456789"
-                  className="w-full px-3 py-1.5 rounded-[6px] bg-white border border-[#E7E5DF] text-[13px] font-mono tabular-nums text-[#16201C] focus:outline-none focus:border-[#16201C]"
+                  className={`w-full px-3 py-1.5 rounded-[6px] bg-white border text-[13px] font-mono tabular-nums text-[#16201C] focus:outline-none ${
+                    fieldErrors.ruc
+                      ? 'border-[#C93B3B] focus:border-[#C93B3B] focus:ring-1 focus:ring-[#C93B3B]'
+                      : 'border-[#E7E5DF] focus:border-[#16201C]'
+                  }`}
                 />
+                {fieldErrors.ruc && (
+                  <p role="alert" className="mt-1 text-[11px] text-[#C93B3B] font-medium">
+                    {fieldErrors.ruc}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -449,11 +591,23 @@ export function ProveedoresManager({ proveedores }: Props) {
                   </label>
                   <input
                     type="text"
+                    inputMode="numeric"
                     value={formTelefono}
-                    onChange={(e) => setFormTelefono(e.target.value)}
-                    placeholder="999 888 777"
-                    className="w-full px-3 py-1.5 rounded-[6px] bg-white border border-[#E7E5DF] text-[13px] font-mono text-[#16201C] focus:outline-none focus:border-[#16201C]"
+                    onChange={(e) => handleTelefonoChange(e.target.value)}
+                    onBlur={handleTelefonoBlur}
+                    aria-invalid={!!fieldErrors.telefono}
+                    placeholder="999888777"
+                    className={`w-full px-3 py-1.5 rounded-[6px] bg-white border text-[13px] font-mono text-[#16201C] focus:outline-none ${
+                      fieldErrors.telefono
+                        ? 'border-[#C93B3B] focus:border-[#C93B3B] focus:ring-1 focus:ring-[#C93B3B]'
+                        : 'border-[#E7E5DF] focus:border-[#16201C]'
+                    }`}
                   />
+                  {fieldErrors.telefono && (
+                    <p role="alert" className="mt-1 text-[11px] text-[#C93B3B] font-medium">
+                      {fieldErrors.telefono}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-[12px] font-semibold text-[#16201C] mb-1">
@@ -462,10 +616,21 @@ export function ProveedoresManager({ proveedores }: Props) {
                   <input
                     type="email"
                     value={formEmail}
-                    onChange={(e) => setFormEmail(e.target.value)}
+                    onChange={(e) => handleEmailChange(e.target.value)}
+                    onBlur={handleEmailBlur}
+                    aria-invalid={!!fieldErrors.email}
                     placeholder="ventas@proveedor.pe"
-                    className="w-full px-3 py-1.5 rounded-[6px] bg-white border border-[#E7E5DF] text-[13px] text-[#16201C] focus:outline-none focus:border-[#16201C]"
+                    className={`w-full px-3 py-1.5 rounded-[6px] bg-white border text-[13px] text-[#16201C] focus:outline-none ${
+                      fieldErrors.email
+                        ? 'border-[#C93B3B] focus:border-[#C93B3B] focus:ring-1 focus:ring-[#C93B3B]'
+                        : 'border-[#E7E5DF] focus:border-[#16201C]'
+                    }`}
                   />
+                  {fieldErrors.email && (
+                    <p role="alert" className="mt-1 text-[11px] text-[#C93B3B] font-medium">
+                      {fieldErrors.email}
+                    </p>
+                  )}
                 </div>
               </div>
 

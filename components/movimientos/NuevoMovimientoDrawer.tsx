@@ -29,9 +29,21 @@ export function NuevoMovimientoDrawer({
 
   const [isPending, startTransition] = useTransition()
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [success, setSuccess] = useState(false)
 
   if (!isOpen) return null
+
+  const handleMotivoChange = (val: string) => {
+    setMotivo(val)
+    if (val.trim().length >= 3) {
+      setFieldErrors((prev) => {
+        const copy = { ...prev }
+        delete copy.motivo
+        return copy
+      })
+    }
+  }
 
   const handleProductoChange = (index: number, prodId: string) => {
     setLineas((prev) =>
@@ -61,15 +73,29 @@ export function NuevoMovimientoDrawer({
     e.preventDefault()
     setErrorMsg(null)
 
-    if (!motivo.trim() || motivo.trim().length < 3) {
-      setErrorMsg('El motivo de la operación es obligatorio (mínimo 3 caracteres).')
-      return
+    const errors: Record<string, string> = {}
+
+    if (!motivo.trim()) {
+      errors.motivo = 'El motivo de la operación es obligatorio.'
+    } else if (motivo.trim().length < 3) {
+      errors.motivo = 'El motivo debe tener al menos 3 caracteres.'
     }
 
     if (tipo === 'TRANSFERENCIA' && almacenOrigenId === almacenDestinoId) {
-      setErrorMsg('En una transferencia, el almacén de origen y destino deben ser distintos.')
+      errors.almacen_destino = 'El almacén de origen y destino deben ser distintos.'
+    }
+
+    if (lineas.some((l) => !l.producto_id || l.cantidad <= 0)) {
+      setErrorMsg('Verifica los productos y que las cantidades sean mayores a 0.')
       return
     }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      return
+    }
+
+    setFieldErrors({})
 
     startTransition(async () => {
       const res = await registrarMovimientoAction({
@@ -205,9 +231,24 @@ export function NuevoMovimientoDrawer({
                     : 'Ej: Ingreso por devolución de cliente o donación'
                 }
                 value={motivo}
-                onChange={(e) => setMotivo(e.target.value)}
-                className="w-full rounded-[6px] border border-[#E7E5DF] px-3 py-1.5 text-[13px] text-[#16201C] focus:outline-none focus:border-[#16201C]"
+                onChange={(e) => handleMotivoChange(e.target.value)}
+                onBlur={() => {
+                  if (!motivo.trim()) {
+                    setFieldErrors((prev) => ({ ...prev, motivo: 'El motivo de la operación es obligatorio.' }))
+                  } else if (motivo.trim().length < 3) {
+                    setFieldErrors((prev) => ({ ...prev, motivo: 'El motivo debe tener al menos 3 caracteres.' }))
+                  }
+                }}
+                aria-invalid={!!fieldErrors.motivo}
+                className={`w-full rounded-[6px] border px-3 py-1.5 text-[13px] text-[#16201C] focus:outline-none ${
+                  fieldErrors.motivo
+                    ? 'border-[#C93B3B] focus:border-[#C93B3B] focus:ring-1 focus:ring-[#C93B3B]'
+                    : 'border-[#E7E5DF] focus:border-[#16201C]'
+                }`}
               />
+              {fieldErrors.motivo && (
+                <p role="alert" className="text-[11px] text-[#C93B3B] mt-1 font-medium">{fieldErrors.motivo}</p>
+              )}
             </div>
 
             {/* Almacenes */}
@@ -243,8 +284,22 @@ export function NuevoMovimientoDrawer({
                   </label>
                   <select
                     value={almacenDestinoId}
-                    onChange={(e) => setAlmacenDestinoId(e.target.value)}
-                    className="w-full rounded-[6px] border border-[#E7E5DF] px-3 py-1.5 text-[13px] text-[#16201C] focus:outline-none focus:border-[#16201C] bg-white"
+                    onChange={(e) => {
+                      setAlmacenDestinoId(e.target.value)
+                      if (e.target.value !== almacenOrigenId) {
+                        setFieldErrors((prev) => {
+                          const copy = { ...prev }
+                          delete copy.almacen_destino
+                          return copy
+                        })
+                      }
+                    }}
+                    aria-invalid={!!fieldErrors.almacen_destino}
+                    className={`w-full rounded-[6px] border px-3 py-1.5 text-[13px] text-[#16201C] focus:outline-none bg-white ${
+                      fieldErrors.almacen_destino
+                        ? 'border-[#C93B3B] focus:border-[#C93B3B]'
+                        : 'border-[#E7E5DF] focus:border-[#16201C]'
+                    }`}
                   >
                     {almacenes
                       .filter((a) => a.id !== almacenOrigenId)
@@ -254,6 +309,9 @@ export function NuevoMovimientoDrawer({
                         </option>
                       ))}
                   </select>
+                  {fieldErrors.almacen_destino && (
+                    <p role="alert" className="text-[11px] text-[#C93B3B] mt-1 font-medium">{fieldErrors.almacen_destino}</p>
+                  )}
                 </div>
               )}
             </div>

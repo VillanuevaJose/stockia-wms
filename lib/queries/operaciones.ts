@@ -472,38 +472,38 @@ export async function getAuditoriaList(): Promise<AuditoriaRow[]> {
   return withFastCache('auditoria-list', 20, async () => {
     const supabase = await createClient()
 
+    // auditoria.usuario_id referencia auth.users (no public.usuarios),
+    // PostgREST no puede hacer join directo a auth.users → fetch separado.
     const { data: auditoria } = await supabase
       .from('auditoria')
-      .select(`
-        id,
-        tabla,
-        accion,
-        registro_id,
-        created_at,
-        usuario:usuario_id (nombre_completo)
-      `)
+      .select('id, tabla, accion, registro_id, created_at, usuario_id')
       .order('created_at', { ascending: false })
-      .limit(30)
+      .limit(50)
 
     if (!auditoria || auditoria.length === 0) {
       return []
     }
 
-    interface RawAuditoriaDb {
-      id: string
-      tabla: string
-      accion: string
-      registro_id: string
-      created_at: string
-      usuario?: { nombre_completo?: string } | { nombre_completo?: string }[]
+    // Recoger IDs únicos para buscar nombres en public.usuarios
+    const usuarioIds = [...new Set(auditoria.map((a) => a.usuario_id).filter(Boolean))] as string[]
+
+    const nombreMap: Record<string, string> = {}
+    if (usuarioIds.length > 0) {
+      const { data: usuarios } = await supabase
+        .from('usuarios')
+        .select('id, nombre_completo')
+        .in('id', usuarioIds)
+      for (const u of usuarios ?? []) {
+        if (u.id) nombreMap[u.id] = u.nombre_completo ?? 'Usuario'
+      }
     }
 
-    return (auditoria as unknown as RawAuditoriaDb[]).map((a) => ({
+    return auditoria.map((a) => ({
       id: a.id,
       tabla: a.tabla,
       accion: a.accion as AuditoriaRow['accion'],
-      registro_id: a.registro_id,
-      usuario_nombre: Array.isArray(a.usuario) ? a.usuario[0]?.nombre_completo || 'Sistema' : a.usuario?.nombre_completo || 'Sistema',
+      registro_id: a.registro_id ?? '',
+      usuario_nombre: a.usuario_id ? (nombreMap[a.usuario_id] ?? 'Sistema') : 'Sistema',
       created_at: a.created_at,
     }))
   })

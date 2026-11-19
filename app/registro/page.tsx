@@ -1,8 +1,7 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { parseFastAuthUser } from '../../lib/supabase/auth-fast'
+import { createClient } from '../../lib/supabase/server'
 import { RegistroForm } from './RegistroForm'
 import { ShieldCheck } from '../../components/ui/icons'
 
@@ -12,10 +11,12 @@ export const metadata: Metadata = {
 }
 
 export default async function RegistroPage() {
-  const cookieStore = await cookies()
-  const fastUser = parseFastAuthUser(cookieStore.getAll())
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-  if (fastUser) {
+  if (user) {
     redirect('/admin')
   }
 

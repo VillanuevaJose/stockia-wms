@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { obtenerDetalleVentaAction } from '@/lib/actions/ventas'
 import { buildInvoiceUblXml } from '@/lib/sunat/ubl-builder'
+import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function GET(
@@ -14,13 +15,34 @@ export async function GET(
       return NextResponse.json({ error: 'ID de comprobante no proporcionado' }, { status: 400 })
     }
 
+    // 1. Validar autenticación de sesión del solicitante
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: 'No autorizado para acceder a este comprobante' }, { status: 401 })
+    }
+
     const res = await obtenerDetalleVentaAction(id)
     if (!res.success || !res.venta) {
       return NextResponse.json({ error: res.error || 'Comprobante no encontrado' }, { status: 404 })
     }
 
+    // 2. Obtener datos fiscales del negocio del usuario autenticado
+    const { data: usuarioPerfil } = await supabase
+      .from('usuarios')
+      .select('negocio_id')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    const userNegocioId = usuarioPerfil?.negocio_id || (user.user_metadata?.negocio_id as string)
+
     const adminClient = createAdminClient()
-    const { data: negocio } = await adminClient.from('negocio').select('ruc, nombre').limit(1).maybeSingle()
+    const { data: negocio } = userNegocioId
+      ? await adminClient.from('negocio').select('ruc, nombre').eq('id', userNegocioId).maybeSingle()
+      : { data: null }
 
     const { xml, filename } = buildInvoiceUblXml(res.venta, {
       ruc: negocio?.ruc || undefined,

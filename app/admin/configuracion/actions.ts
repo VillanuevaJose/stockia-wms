@@ -20,7 +20,14 @@ const configuracionSchema = z.object({
       'El RUC debe tener exactamente 11 dígitos numéricos'
     ),
   direccion: z.string().trim().max(200).optional(),
-  telefono: z.string().trim().max(30).optional(),
+  telefono: z
+    .string()
+    .trim()
+    .refine(
+      (val) => !val || /^[0-9]{7,15}$/.test(val.replace(/\s+/g, '')),
+      'El teléfono debe contener solo números (entre 7 y 15 dígitos)'
+    )
+    .optional(),
   logo_url: z.string().trim().optional(),
 })
 

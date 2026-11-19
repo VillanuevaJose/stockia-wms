@@ -61,6 +61,21 @@ export function RegistroForm() {
   const [isCulqiModalOpen, setIsCulqiModalOpen] = useState(false)
   const [culqiChargeId, setCulqiChargeId] = useState('')
   const [clientError, setClientError] = useState<string | null>(null)
+  const [clientFieldErrors, setClientFieldErrors] = useState<Record<string, string>>({})
+  const [rucVal, setRucVal] = useState('')
+
+  const handleRucChange = (val: string) => {
+    if (/[^\d]/.test(val)) {
+      setClientFieldErrors((prev) => ({ ...prev, ruc: 'Error: el RUC solo debe contener números.' }))
+    } else {
+      setClientFieldErrors((prev) => {
+        const copy = { ...prev }
+        delete copy.ruc
+        return copy
+      })
+    }
+    setRucVal(val.replace(/\D/g, '').slice(0, 11))
+  }
 
   const strength = useMemo(() => evaluatePassword(password), [password])
   const passwordsMatch = useMemo(() => {
@@ -75,6 +90,7 @@ export function RegistroForm() {
 
     e.preventDefault()
     setClientError(null)
+    setClientFieldErrors({})
 
     const form = formRef.current
     if (!form) return
@@ -82,31 +98,33 @@ export function RegistroForm() {
     const formData = new FormData(form)
     const nombre = String(formData.get('nombre_completo') || '').trim()
     const negocio = String(formData.get('nombre_negocio') || '').trim()
-    const ruc = String(formData.get('ruc') || '').trim()
+    const ruc = rucVal.trim()
     const correo = String(formData.get('email') || '').trim()
 
+    const errors: Record<string, string> = {}
+
     if (!nombre) {
-      setClientError('Por favor ingresa tu nombre y apellidos.')
-      return
+      errors.nombre_completo = 'Ingresa tu nombre y apellidos.'
     }
     if (!negocio) {
-      setClientError('Por favor ingresa el nombre de la empresa o negocio.')
-      return
+      errors.nombre_negocio = 'Ingresa el nombre de la empresa o negocio.'
     }
     if (ruc && !/^[0-9]{11}$/.test(ruc)) {
-      setClientError('El RUC debe tener exactamente 11 dígitos numéricos.')
-      return
+      errors.ruc = 'El RUC debe tener exactamente 11 dígitos numéricos.'
     }
-    if (!correo || !correo.includes('@')) {
-      setClientError('Ingresa un correo institucional válido.')
-      return
+    if (!correo || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)) {
+      errors.email = 'Ingresa un correo institucional válido.'
     }
     if (password.length < 8) {
-      setClientError('La contraseña debe tener al menos 8 caracteres.')
-      return
+      errors.password = 'La contraseña debe tener al menos 8 caracteres.'
     }
     if (password !== confirmPassword) {
-      setClientError('Las contraseñas no coinciden.')
+      errors.confirm_password = 'Las contraseñas no coinciden.'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setClientFieldErrors(errors)
+      setClientError('Por favor corrige los campos señalados.')
       return
     }
 
@@ -203,7 +221,7 @@ export function RegistroForm() {
             htmlFor="nombre_completo"
             className="block text-[13px] font-medium text-[#171717] mb-1.5"
           >
-            Nombre y Apellidos del Administrador
+            Nombre y Apellidos del Administrador *
           </label>
           <div className="relative">
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-[#8f8f8f]">
@@ -217,17 +235,17 @@ export function RegistroForm() {
               required
               autoFocus
               placeholder="Mateo Mesa"
-              aria-invalid={!!state?.fieldErrors?.nombre_completo}
+              aria-invalid={!!(clientFieldErrors.nombre_completo || state?.fieldErrors?.nombre_completo)}
               className={`w-full rounded-[6px] border bg-white pl-9 pr-3.5 py-2 text-[13px] text-[#171717] placeholder:text-[#8f8f8f] transition-all focus:outline-none focus:ring-1 focus:ring-[#171717] focus:border-[#171717] ${
-                state?.fieldErrors?.nombre_completo
+                clientFieldErrors.nombre_completo || state?.fieldErrors?.nombre_completo
                   ? 'border-[#e5484d] focus:border-[#e5484d] focus:ring-[#e5484d]'
                   : 'border-[#ebebeb] hover:border-[#a8a8a8]'
               }`}
             />
           </div>
-          {state?.fieldErrors?.nombre_completo && (
+          {(clientFieldErrors.nombre_completo || state?.fieldErrors?.nombre_completo) && (
             <p role="alert" className="mt-1 text-[12px] text-[#e5484d] font-normal">
-              {state.fieldErrors.nombre_completo}
+              {clientFieldErrors.nombre_completo || state?.fieldErrors?.nombre_completo}
             </p>
           )}
         </div>
@@ -238,7 +256,7 @@ export function RegistroForm() {
             htmlFor="nombre_negocio"
             className="block text-[13px] font-medium text-[#171717] mb-1.5"
           >
-            Nombre de la Empresa o Negocio
+            Nombre de la Empresa o Negocio *
           </label>
           <div className="relative">
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-[#8f8f8f]">
@@ -252,17 +270,17 @@ export function RegistroForm() {
               required
               placeholder="Distribuidora Central S.A.C."
               onChange={(e) => setNombreNegocio(e.target.value)}
-              aria-invalid={!!state?.fieldErrors?.nombre_negocio}
+              aria-invalid={!!(clientFieldErrors.nombre_negocio || state?.fieldErrors?.nombre_negocio)}
               className={`w-full rounded-[6px] border bg-white pl-9 pr-3.5 py-2 text-[13px] text-[#171717] placeholder:text-[#8f8f8f] transition-all focus:outline-none focus:ring-1 focus:ring-[#171717] focus:border-[#171717] ${
-                state?.fieldErrors?.nombre_negocio
+                clientFieldErrors.nombre_negocio || state?.fieldErrors?.nombre_negocio
                   ? 'border-[#e5484d] focus:border-[#e5484d] focus:ring-[#e5484d]'
                   : 'border-[#ebebeb] hover:border-[#a8a8a8]'
               }`}
             />
           </div>
-          {state?.fieldErrors?.nombre_negocio && (
+          {(clientFieldErrors.nombre_negocio || state?.fieldErrors?.nombre_negocio) && (
             <p role="alert" className="mt-1 text-[12px] text-[#e5484d] font-normal">
-              {state.fieldErrors.nombre_negocio}
+              {clientFieldErrors.nombre_negocio || state?.fieldErrors?.nombre_negocio}
             </p>
           )}
         </div>
@@ -273,7 +291,7 @@ export function RegistroForm() {
             htmlFor="ruc"
             className="block text-[13px] font-medium text-[#171717] mb-1.5"
           >
-            RUC <span className="text-[#8f8f8f] font-normal">(Opcional, 11 dígitos)</span>
+            RUC <span className="text-[#8f8f8f] font-normal">(Opcional, 11 dígitos numéricos)</span>
           </label>
           <input
             id="ruc"
@@ -281,17 +299,19 @@ export function RegistroForm() {
             type="text"
             inputMode="numeric"
             maxLength={11}
+            value={rucVal}
+            onChange={(e) => handleRucChange(e.target.value)}
             placeholder="20123456789"
-            aria-invalid={!!state?.fieldErrors?.ruc}
+            aria-invalid={!!(clientFieldErrors.ruc || state?.fieldErrors?.ruc)}
             className={`w-full rounded-[6px] border bg-white px-3.5 py-2 text-[13px] text-[#171717] placeholder:text-[#8f8f8f] tabular-nums transition-all focus:outline-none focus:ring-1 focus:ring-[#171717] focus:border-[#171717] ${
-              state?.fieldErrors?.ruc
+              clientFieldErrors.ruc || state?.fieldErrors?.ruc
                 ? 'border-[#e5484d] focus:border-[#e5484d] focus:ring-[#e5484d]'
                 : 'border-[#ebebeb] hover:border-[#a8a8a8]'
             }`}
           />
-          {state?.fieldErrors?.ruc && (
+          {(clientFieldErrors.ruc || state?.fieldErrors?.ruc) && (
             <p role="alert" className="mt-1 text-[12px] text-[#e5484d] font-normal">
-              {state.fieldErrors.ruc}
+              {clientFieldErrors.ruc || state?.fieldErrors?.ruc}
             </p>
           )}
         </div>
@@ -302,7 +322,7 @@ export function RegistroForm() {
             htmlFor="email"
             className="block text-[13px] font-medium text-[#171717] mb-1.5"
           >
-            Correo institucional del Administrador
+            Correo institucional del Administrador *
           </label>
           <div className="relative">
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-[#8f8f8f]">
@@ -316,17 +336,17 @@ export function RegistroForm() {
               required
               placeholder="admin@tuempresa.com"
               onChange={(e) => setEmail(e.target.value)}
-              aria-invalid={!!state?.fieldErrors?.email}
+              aria-invalid={!!(clientFieldErrors.email || state?.fieldErrors?.email)}
               className={`w-full rounded-[6px] border bg-white pl-9 pr-3.5 py-2 text-[13px] text-[#171717] placeholder:text-[#8f8f8f] transition-all focus:outline-none focus:ring-1 focus:ring-[#171717] focus:border-[#171717] ${
-                state?.fieldErrors?.email
+                clientFieldErrors.email || state?.fieldErrors?.email
                   ? 'border-[#e5484d] focus:border-[#e5484d] focus:ring-[#e5484d]'
                   : 'border-[#ebebeb] hover:border-[#a8a8a8]'
               }`}
             />
           </div>
-          {state?.fieldErrors?.email && (
+          {(clientFieldErrors.email || state?.fieldErrors?.email) && (
             <p role="alert" className="mt-1 text-[12px] text-[#e5484d] font-normal">
-              {state.fieldErrors.email}
+              {clientFieldErrors.email || state?.fieldErrors?.email}
             </p>
           )}
         </div>
@@ -337,7 +357,7 @@ export function RegistroForm() {
             htmlFor="password"
             className="block text-[13px] font-medium text-[#171717] mb-1.5"
           >
-            Contraseña de acceso
+            Contraseña de acceso *
           </label>
           <div className="relative">
             <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-[#8f8f8f]">
@@ -352,9 +372,9 @@ export function RegistroForm() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Mínimo 8 caracteres"
-              aria-invalid={!!state?.fieldErrors?.password}
+              aria-invalid={!!(clientFieldErrors.password || state?.fieldErrors?.password)}
               className={`w-full rounded-[6px] border bg-white pl-9 pr-10 py-2 text-[13px] text-[#171717] placeholder:text-[#8f8f8f] transition-all focus:outline-none focus:ring-1 focus:ring-[#171717] focus:border-[#171717] ${
-                state?.fieldErrors?.password
+                clientFieldErrors.password || state?.fieldErrors?.password
                   ? 'border-[#e5484d] focus:border-[#e5484d] focus:ring-[#e5484d]'
                   : 'border-[#ebebeb] hover:border-[#a8a8a8]'
               }`}
@@ -388,9 +408,10 @@ export function RegistroForm() {
               </div>
             </div>
           )}
-          {state?.fieldErrors?.password && (
+
+          {(clientFieldErrors.password || state?.fieldErrors?.password) && (
             <p role="alert" className="mt-1 text-[12px] text-[#e5484d] font-normal">
-              {state.fieldErrors.password}
+              {clientFieldErrors.password || state?.fieldErrors?.password}
             </p>
           )}
         </div>
@@ -416,9 +437,9 @@ export function RegistroForm() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Repite la contraseña"
-              aria-invalid={!!state?.fieldErrors?.confirmarPassword}
+              aria-invalid={!!(clientFieldErrors.confirm_password || state?.fieldErrors?.confirmarPassword)}
               className={`w-full rounded-[6px] border bg-white pl-9 pr-10 py-2 text-[13px] text-[#171717] placeholder:text-[#8f8f8f] transition-all focus:outline-none focus:ring-1 focus:ring-[#171717] focus:border-[#171717] ${
-                state?.fieldErrors?.confirmarPassword
+                clientFieldErrors.confirm_password || state?.fieldErrors?.confirmarPassword
                   ? 'border-[#e5484d] focus:border-[#e5484d] focus:ring-[#e5484d]'
                   : 'border-[#ebebeb] hover:border-[#a8a8a8]'
               }`}
@@ -432,6 +453,11 @@ export function RegistroForm() {
               {showConfirmPassword ? <EyeOff size={14} /> : <Eye size={14} />}
             </button>
           </div>
+          {(clientFieldErrors.confirm_password || state?.fieldErrors?.confirmarPassword) && (
+            <p role="alert" className="mt-1 text-[12px] text-[#e5484d] font-normal">
+              {clientFieldErrors.confirm_password || state?.fieldErrors?.confirmarPassword}
+            </p>
+          )}
           {confirmPassword.length > 0 && (
             <div className="mt-1 text-[12px]">
               {passwordsMatch ? (

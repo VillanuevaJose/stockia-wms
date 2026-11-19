@@ -16,7 +16,14 @@ const proveedorSchema = z.object({
     .optional()
     .nullable(),
   contacto_nombre: z.string().trim().optional().nullable(),
-  telefono: z.string().trim().optional().nullable(),
+  telefono: z
+    .string()
+    .trim()
+    .refine((val) => val === '' || /^\d{7,15}$/.test(val.replace(/\s+/g, '')), {
+      message: 'El teléfono debe contener solo números (entre 7 y 15 dígitos)',
+    })
+    .optional()
+    .nullable(),
   email: z
     .string()
     .trim()
@@ -31,6 +38,7 @@ const proveedorSchema = z.object({
 export type ProveedorResult = {
   success: boolean
   error?: string
+  fieldErrors?: Record<string, string>
   proveedor_id?: string
 }
 
@@ -39,7 +47,16 @@ export async function crearProveedorAction(
 ): Promise<ProveedorResult> {
   const validated = proveedorSchema.safeParse(data)
   if (!validated.success) {
-    return { success: false, error: validated.error.issues[0]?.message || 'Datos del proveedor inválidos.' }
+    const fieldErrors: Record<string, string> = {}
+    validated.error.issues.forEach((issue) => {
+      const path = issue.path[0]
+      if (path) fieldErrors[String(path)] = issue.message
+    })
+    return {
+      success: false,
+      error: validated.error.issues[0]?.message || 'Datos del proveedor inválidos.',
+      fieldErrors,
+    }
   }
 
   const supabase = await createClient()
@@ -103,7 +120,16 @@ export async function editarProveedorAction(
 ): Promise<ProveedorResult> {
   const validated = proveedorSchema.safeParse(data)
   if (!validated.success) {
-    return { success: false, error: validated.error.issues[0]?.message || 'Datos del proveedor inválidos.' }
+    const fieldErrors: Record<string, string> = {}
+    validated.error.issues.forEach((issue) => {
+      const path = issue.path[0]
+      if (path) fieldErrors[String(path)] = issue.message
+    })
+    return {
+      success: false,
+      error: validated.error.issues[0]?.message || 'Datos del proveedor inválidos.',
+      fieldErrors,
+    }
   }
 
   const supabase = await createClient()
@@ -146,7 +172,6 @@ export async function editarProveedorAction(
       telefono: validated.data.telefono?.trim() || null,
       email: validated.data.email?.trim() || null,
       direccion: validated.data.direccion?.trim() || null,
-      updated_at: new Date().toISOString(),
     })
     .eq('id', id)
     .eq('negocio_id', usuario.negocio_id)
@@ -184,7 +209,6 @@ export async function toggleProveedorActivoAction(
     .from('proveedor')
     .update({
       activo,
-      updated_at: new Date().toISOString(),
     })
     .eq('id', id)
     .eq('negocio_id', usuario.negocio_id)

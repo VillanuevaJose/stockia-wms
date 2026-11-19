@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import { parseFastAuthUser } from './lib/supabase/auth-fast'
+import { createServerClient } from '@supabase/ssr'
 
 export async function proxy(request: NextRequest) {
-  const supabaseResponse = NextResponse.next({
+  let supabaseResponse = NextResponse.next({
     request,
   })
 
@@ -22,24 +22,48 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse
   }
 
-  const allCookies = request.cookies.getAll()
-  const fastUser = parseFastAuthUser(allCookies)
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          supabaseResponse = NextResponse.next({
+            request,
+          })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
+  )
 
-  // 1. Si tiene sesión válida verificada en memoria
-  if (fastUser) {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  // 1. Si tiene sesión válida verificada criptográficamente por Supabase
+  if (user) {
+    const rol = (user.user_metadata?.rol || 'admin') as 'admin' | 'almacenero' | 'vendedor'
+
     if (isAuthPath) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname =
-        fastUser.rol === 'vendedor'
+        rol === 'vendedor'
           ? '/vendedor'
-          : fastUser.rol === 'almacenero'
+          : rol === 'almacenero'
           ? '/almacenero'
           : '/admin'
       return NextResponse.redirect(redirectUrl)
     }
 
     // Control de acceso RBAC por rol
-    if (fastUser.rol === 'vendedor') {
+    if (rol === 'vendedor') {
       const allowedVendedor =
         pathname === '/vendedor' ||
         pathname.startsWith('/vendedor/') ||
@@ -51,7 +75,7 @@ export async function proxy(request: NextRequest) {
         redirectUrl.pathname = '/vendedor'
         return NextResponse.redirect(redirectUrl)
       }
-    } else if (fastUser.rol === 'almacenero') {
+    } else if (rol === 'almacenero') {
       const forbiddenAlmacenero =
         pathname.startsWith('/admin/usuarios') ||
         pathname.startsWith('/admin/configuracion') ||
@@ -68,17 +92,7 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse
   }
 
-  // 2. Si no se pudo parsear pero tiene cookies de Supabase (por ejemplo durante login activo)
-  const hasAuthCookie = allCookies.some(
-    (c) => c.name.startsWith('sb-') && (c.name.includes('-auth-token') || c.name.includes('access-token'))
-  )
-
-  // Si tiene cookies de auth, no rebotar: permitir que el Server Component en layout.tsx lo verifique
-  if (hasAuthCookie) {
-    return supabaseResponse
-  }
-
-  // 3. Solo si NO tiene ninguna cookie de autenticación y la ruta es protegida, redirigir a login
+  // 2. Si es ruta protegida y no tiene sesión válida comprobada
   if (isProtectedPath) {
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = '/login'

@@ -12,19 +12,38 @@ interface Props {
 export function CategoriasManager({ categorias }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [nombre, setNombre] = useState('')
+  const [descripcion, setDescripcion] = useState('')
   const [isPending, startTransition] = useTransition()
 
   const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setErrorMsg(null)
-    const formData = new FormData(e.currentTarget)
+
+    if (!nombre.trim()) {
+      setFieldErrors({ nombre: 'El nombre de la categoría es obligatorio.' })
+      return
+    }
+    if (nombre.trim().length < 2) {
+      setFieldErrors({ nombre: 'El nombre debe tener al menos 2 caracteres.' })
+      return
+    }
+
+    setFieldErrors({})
+    const formData = new FormData()
+    formData.append('nombre', nombre.trim())
+    if (descripcion.trim()) formData.append('descripcion', descripcion.trim())
 
     startTransition(async () => {
       const res = await crearCategoriaAction(null, formData)
       if (res?.success) {
+        setNombre('')
+        setDescripcion('')
         setDrawerOpen(false)
       } else {
         setErrorMsg(res?.error || 'Error al crear la categoría.')
+        if (res?.fieldErrors) setFieldErrors(res.fieldErrors)
       }
     })
   }
@@ -127,17 +146,43 @@ export function CategoriasManager({ categorias }: Props) {
                 </div>
               )}
 
-              <form onSubmit={handleFormSubmit} id="cat-form" className="mt-4 space-y-4">
+              <form onSubmit={handleFormSubmit} id="cat-form" className="mt-4 space-y-4" noValidate>
                 <div>
                   <label className="block text-[12px] font-medium text-[#16201C] mb-1">
-                    Nombre de la Categoría
+                    Nombre de la Categoría *
                   </label>
                   <input
                     name="nombre"
                     required
+                    value={nombre}
+                    onChange={(e) => {
+                      setNombre(e.target.value)
+                      if (e.target.value.trim().length >= 2) {
+                        setFieldErrors((prev) => {
+                          const copy = { ...prev }
+                          delete copy.nombre
+                          return copy
+                        })
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!nombre.trim()) {
+                        setFieldErrors((prev) => ({ ...prev, nombre: 'El nombre de la categoría es obligatorio.' }))
+                      } else if (nombre.trim().length < 2) {
+                        setFieldErrors((prev) => ({ ...prev, nombre: 'El nombre debe tener al menos 2 caracteres.' }))
+                      }
+                    }}
                     placeholder="Herramientas Eléctricas"
-                    className="w-full rounded-[6px] border border-[#E7E5DF] px-3 py-1.5 text-[13px] text-[#16201C] focus:outline-none focus:border-[#16201C]"
+                    aria-invalid={!!fieldErrors.nombre}
+                    className={`w-full rounded-[6px] border px-3 py-1.5 text-[13px] text-[#16201C] focus:outline-none ${
+                      fieldErrors.nombre
+                        ? 'border-[#C93B3B] focus:border-[#C93B3B] focus:ring-1 focus:ring-[#C93B3B]'
+                        : 'border-[#E7E5DF] focus:border-[#16201C]'
+                    }`}
                   />
+                  {fieldErrors.nombre && (
+                    <p role="alert" className="text-[11px] text-[#C93B3B] mt-1 font-medium">{fieldErrors.nombre}</p>
+                  )}
                 </div>
 
                 <div>
@@ -147,6 +192,8 @@ export function CategoriasManager({ categorias }: Props) {
                   <textarea
                     name="descripcion"
                     rows={3}
+                    value={descripcion}
+                    onChange={(e) => setDescripcion(e.target.value)}
                     placeholder="Taladros, sierras, amoladoras y accesorios de potencia..."
                     className="w-full rounded-[6px] border border-[#E7E5DF] px-3 py-1.5 text-[13px] text-[#16201C] focus:outline-none focus:border-[#16201C]"
                   />

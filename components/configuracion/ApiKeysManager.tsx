@@ -9,12 +9,14 @@ export function ApiKeysManager() {
   const [copiedCurlGet, setCopiedCurlGet] = useState(false)
   const [copiedCurlPost, setCopiedCurlPost] = useState(false)
 
+  const activeKeyDisplay = DEFAULT_DEMO_API_KEY || 'stk_live_demo_auth_b2b_key'
+
   const curlGetExample = `curl -X GET "http://localhost:3000/api/v1/inventario" \\
-  -H "x-api-key: ${DEFAULT_DEMO_API_KEY}"`
+  -H "x-api-key: ${activeKeyDisplay}"`
 
   const curlPostExample = `curl -X POST "http://localhost:3000/api/v1/movimientos" \\
   -H "Content-Type: application/json" \\
-  -H "x-api-key: ${DEFAULT_DEMO_API_KEY}" \\
+  -H "x-api-key: ${activeKeyDisplay}" \\
   -d '{
     "tipo": "SALIDA",
     "motivo": "Despacho automatizado pedido web #4092",
@@ -35,22 +37,22 @@ export function ApiKeysManager() {
       <div className="bg-white p-5 rounded-[8px] border border-[#E7E5DF] space-y-4">
         <div className="flex items-center justify-between border-b border-[#E7E5DF] pb-3">
           <div>
-            <h3 className="text-[15px] font-bold text-[#16201C]">API Key Maestra B2B (Producción / Demo)</h3>
+            <h3 className="text-[15px] font-bold text-[#16201C]">API Key B2B</h3>
             <p className="text-[12px] text-[#6B7A72] mt-0.5">
               Utiliza esta clave en la cabecera HTTP <code className="bg-[#FAFAF7] px-1.5 py-0.5 rounded border border-[#E7E5DF] font-mono text-[11px]">x-api-key</code> para autenticar sistemas externos (Shopify, ERPs, apps móviles).
             </p>
           </div>
           <span className="px-2.5 py-1 bg-[#E8F5E9] text-[#2E7D32] border border-[#C8E6C9] rounded-[4px] text-[11px] font-bold">
-            ACTIVA
+            CONFIGURADA
           </span>
         </div>
 
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <div className="flex-1 font-mono text-[12px] bg-[#FAFAF7] border border-[#E7E5DF] px-3.5 py-2 rounded-[6px] text-[#16201C] select-all truncate">
-            {DEFAULT_DEMO_API_KEY}
+            {activeKeyDisplay}
           </div>
           <button
-            onClick={() => copyToClipboard(DEFAULT_DEMO_API_KEY, setCopiedKey)}
+            onClick={() => copyToClipboard(activeKeyDisplay, setCopiedKey)}
             className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-[12px] font-medium bg-[#16201C] hover:bg-[#2A3B34] text-white rounded-[6px] transition-colors cursor-pointer"
           >
             {copiedKey ? (

@@ -1,6 +1,4 @@
-import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
-import { parseFastAuthUser } from '../../lib/supabase/auth-fast'
 import { createClient } from '../../lib/supabase/server'
 import { AppLayoutClient } from '../../components/layout/AppLayoutClient'
 
@@ -9,21 +7,6 @@ export default async function VendedorLayout({
 }: {
   children: React.ReactNode
 }) {
-  const cookieStore = await cookies()
-  const fastUser = parseFastAuthUser(cookieStore.getAll())
-
-  if (fastUser) {
-    return (
-      <AppLayoutClient
-        userName={fastUser.nombreCompleto}
-        userRole={fastUser.rol}
-        userEmail={fastUser.email}
-      >
-        {children}
-      </AppLayoutClient>
-    )
-  }
-
   const supabase = await createClient()
   const {
     data: { user },

@@ -12,19 +12,48 @@ interface Props {
 export function AlmacenesManager({ almacenes }: Props) {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [nombre, setNombre] = useState('')
+  const [codigo, setCodigo] = useState('')
+  const [direccion, setDireccion] = useState('')
   const [isPending, startTransition] = useTransition()
 
   const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setErrorMsg(null)
-    const formData = new FormData(e.currentTarget)
+
+    const errors: Record<string, string> = {}
+    if (!nombre.trim()) {
+      errors.nombre = 'El nombre de la sede o almacén es obligatorio.'
+    } else if (nombre.trim().length < 2) {
+      errors.nombre = 'El nombre debe tener al menos 2 caracteres.'
+    }
+
+    if (codigo.trim() && !/^[A-Za-z0-9\-_]{2,10}$/.test(codigo.trim())) {
+      errors.codigo = 'El código debe tener entre 2 y 10 caracteres alfanuméricos (ej. ALM-01).'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      return
+    }
+
+    setFieldErrors({})
+    const formData = new FormData()
+    formData.append('nombre', nombre.trim())
+    if (codigo.trim()) formData.append('codigo', codigo.trim().toUpperCase())
+    if (direccion.trim()) formData.append('direccion', direccion.trim())
 
     startTransition(async () => {
       const res = await crearAlmacenAction(null, formData)
       if (res?.success) {
+        setNombre('')
+        setCodigo('')
+        setDireccion('')
         setDrawerOpen(false)
       } else {
         setErrorMsg(res?.error || 'Error al crear la sede.')
+        if (res?.fieldErrors) setFieldErrors(res.fieldErrors)
       }
     })
   }
@@ -120,28 +149,79 @@ export function AlmacenesManager({ almacenes }: Props) {
                 </div>
               )}
 
-              <form onSubmit={handleFormSubmit} id="alm-form" className="mt-4 space-y-4">
+              <form onSubmit={handleFormSubmit} id="alm-form" className="mt-4 space-y-4" noValidate>
                 <div>
                   <label className="block text-[12px] font-medium text-[#16201C] mb-1">
-                    Nombre del Almacén / Sede
+                    Nombre del Almacén / Sede *
                   </label>
                   <input
                     name="nombre"
                     required
+                    value={nombre}
+                    onChange={(e) => {
+                      setNombre(e.target.value)
+                      if (e.target.value.trim().length >= 2) {
+                        setFieldErrors((prev) => {
+                          const copy = { ...prev }
+                          delete copy.nombre
+                          return copy
+                        })
+                      }
+                    }}
+                    onBlur={() => {
+                      if (!nombre.trim()) {
+                        setFieldErrors((prev) => ({ ...prev, nombre: 'El nombre de la sede es obligatorio.' }))
+                      } else if (nombre.trim().length < 2) {
+                        setFieldErrors((prev) => ({ ...prev, nombre: 'El nombre debe tener al menos 2 caracteres.' }))
+                      }
+                    }}
                     placeholder="Sede Despacho Rápido - Ate"
-                    className="w-full rounded-[6px] border border-[#E7E5DF] px-3 py-1.5 text-[13px] text-[#16201C] focus:outline-none focus:border-[#16201C]"
+                    aria-invalid={!!fieldErrors.nombre}
+                    className={`w-full rounded-[6px] border px-3 py-1.5 text-[13px] text-[#16201C] focus:outline-none ${
+                      fieldErrors.nombre
+                        ? 'border-[#C93B3B] focus:border-[#C93B3B] focus:ring-1 focus:ring-[#C93B3B]'
+                        : 'border-[#E7E5DF] focus:border-[#16201C]'
+                    }`}
                   />
+                  {fieldErrors.nombre && (
+                    <p role="alert" className="text-[11px] text-[#C93B3B] mt-1 font-medium">{fieldErrors.nombre}</p>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-[12px] font-medium text-[#16201C] mb-1">
-                    Código de Sede <span className="text-[#6B7A72] font-normal">(Opcional)</span>
+                    Código de Sede <span className="text-[#6B7A72] font-normal">(Opcional, 2 a 10 caracteres)</span>
                   </label>
                   <input
                     name="codigo"
+                    value={codigo}
+                    onChange={(e) => {
+                      const val = e.target.value.toUpperCase()
+                      setCodigo(val)
+                      if (!val || /^[A-Za-z0-9\-_]{2,10}$/.test(val)) {
+                        setFieldErrors((prev) => {
+                          const copy = { ...prev }
+                          delete copy.codigo
+                          return copy
+                        })
+                      }
+                    }}
+                    onBlur={() => {
+                      if (codigo.trim() && !/^[A-Za-z0-9\-_]{2,10}$/.test(codigo.trim())) {
+                        setFieldErrors((prev) => ({ ...prev, codigo: 'Formato inválido (solo letras, números y guiones).' }))
+                      }
+                    }}
                     placeholder="ALM-02"
-                    className="w-full rounded-[6px] border border-[#E7E5DF] px-3 py-1.5 text-[13px] text-[#16201C] font-mono focus:outline-none focus:border-[#16201C]"
+                    aria-invalid={!!fieldErrors.codigo}
+                    className={`w-full rounded-[6px] border px-3 py-1.5 text-[13px] text-[#16201C] font-mono focus:outline-none ${
+                      fieldErrors.codigo
+                        ? 'border-[#C93B3B] focus:border-[#C93B3B] focus:ring-1 focus:ring-[#C93B3B]'
+                        : 'border-[#E7E5DF] focus:border-[#16201C]'
+                    }`}
                   />
+                  {fieldErrors.codigo && (
+                    <p role="alert" className="text-[11px] text-[#C93B3B] mt-1 font-medium">{fieldErrors.codigo}</p>
+                  )}
                 </div>
 
                 <div>
@@ -150,6 +230,8 @@ export function AlmacenesManager({ almacenes }: Props) {
                   </label>
                   <input
                     name="direccion"
+                    value={direccion}
+                    onChange={(e) => setDireccion(e.target.value)}
                     placeholder="Carretera Central Km 7.5, Ate"
                     className="w-full rounded-[6px] border border-[#E7E5DF] px-3 py-1.5 text-[13px] text-[#16201C] focus:outline-none focus:border-[#16201C]"
                   />

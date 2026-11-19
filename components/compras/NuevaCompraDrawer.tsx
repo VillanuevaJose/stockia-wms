@@ -43,9 +43,34 @@ export function NuevaCompraDrawer({
 
   const [isPending, startTransition] = useTransition()
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [success, setSuccess] = useState(false)
 
   if (!isOpen) return null
+
+  const handleNuevoRucChange = (val: string) => {
+    if (/[^\d]/.test(val)) {
+      setFieldErrors((prev) => ({ ...prev, nuevo_proveedor_ruc: 'Error: el RUC solo debe contener números.' }))
+    } else {
+      setFieldErrors((prev) => {
+        const copy = { ...prev }
+        delete copy.nuevo_proveedor_ruc
+        return copy
+      })
+    }
+    setNuevoRuc(val.replace(/\D/g, '').slice(0, 11))
+  }
+
+  const handleNumeroComprobanteChange = (val: string) => {
+    setNumeroComprobante(val)
+    if (val.trim()) {
+      setFieldErrors((prev) => {
+        const copy = { ...prev }
+        delete copy.numero_comprobante
+        return copy
+      })
+    }
+  }
 
   const handleProductoChange = (index: number, prodId: string) => {
     const prod = productos.find((p) => p.id === prodId)
@@ -99,15 +124,32 @@ export function NuevaCompraDrawer({
     e.preventDefault()
     setErrorMsg(null)
 
+    const errors: Record<string, string> = {}
+
+    if (crearNuevoProv) {
+      if (!nuevoProveedor.trim()) {
+        errors.nuevo_proveedor_nombre = 'El nombre o razón social del nuevo proveedor es obligatorio.'
+      }
+      if (nuevoRuc.trim() && nuevoRuc.trim().length !== 11) {
+        errors.nuevo_proveedor_ruc = 'El RUC debe tener exactamente 11 dígitos numéricos.'
+      }
+    }
+
     if (!numeroComprobante.trim()) {
-      setErrorMsg('Ingresa el número de factura o comprobante de compra.')
-      return
+      errors.numero_comprobante = 'El número de comprobante o factura es obligatorio.'
     }
 
     if (lineas.some((l) => !l.producto_id || l.cantidad <= 0)) {
-      setErrorMsg('Verifica los productos y cantidades de la compra.')
+      setErrorMsg('Verifica que todos los productos seleccionados tengan una cantidad mayor a 0.')
       return
     }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors)
+      return
+    }
+
+    setFieldErrors({})
 
     startTransition(async () => {
       const res = await registrarCompraAction({
@@ -186,23 +228,64 @@ export function NuevaCompraDrawer({
               </div>
 
               {crearNuevoProv ? (
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="text"
-                    required
-                    placeholder="Razón Social o Nombre"
-                    value={nuevoProveedor}
-                    onChange={(e) => setNuevoProveedor(e.target.value)}
-                    className="rounded-[6px] border border-[#E7E5DF] px-3 py-1.5 text-[13px] text-[#16201C] focus:outline-none focus:border-[#16201C]"
-                  />
-                  <input
-                    type="text"
-                    maxLength={11}
-                    placeholder="RUC (11 dígitos)"
-                    value={nuevoRuc}
-                    onChange={(e) => setNuevoRuc(e.target.value)}
-                    className="rounded-[6px] border border-[#E7E5DF] px-3 py-1.5 text-[13px] text-[#16201C] font-mono tabular-nums focus:outline-none focus:border-[#16201C]"
-                  />
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Razón Social o Nombre"
+                        value={nuevoProveedor}
+                        onChange={(e) => {
+                          setNuevoProveedor(e.target.value)
+                          if (e.target.value.trim()) {
+                            setFieldErrors((prev) => {
+                              const copy = { ...prev }
+                              delete copy.nuevo_proveedor_nombre
+                              return copy
+                            })
+                          }
+                        }}
+                        aria-invalid={!!fieldErrors.nuevo_proveedor_nombre}
+                        className={`w-full rounded-[6px] border px-3 py-1.5 text-[13px] text-[#16201C] focus:outline-none ${
+                          fieldErrors.nuevo_proveedor_nombre
+                            ? 'border-[#C93B3B] focus:border-[#C93B3B] focus:ring-1 focus:ring-[#C93B3B]'
+                            : 'border-[#E7E5DF] focus:border-[#16201C]'
+                        }`}
+                      />
+                      {fieldErrors.nuevo_proveedor_nombre && (
+                        <p role="alert" className="text-[11px] text-[#C93B3B] mt-1 font-medium">
+                          {fieldErrors.nuevo_proveedor_nombre}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        maxLength={11}
+                        inputMode="numeric"
+                        placeholder="RUC (11 dígitos)"
+                        value={nuevoRuc}
+                        onChange={(e) => handleNuevoRucChange(e.target.value)}
+                        onBlur={() => {
+                          if (nuevoRuc.trim() && nuevoRuc.trim().length !== 11) {
+                            setFieldErrors((prev) => ({ ...prev, nuevo_proveedor_ruc: 'El RUC debe tener 11 dígitos.' }))
+                          }
+                        }}
+                        aria-invalid={!!fieldErrors.nuevo_proveedor_ruc}
+                        className={`w-full rounded-[6px] border px-3 py-1.5 text-[13px] text-[#16201C] font-mono tabular-nums focus:outline-none ${
+                          fieldErrors.nuevo_proveedor_ruc
+                            ? 'border-[#C93B3B] focus:border-[#C93B3B] focus:ring-1 focus:ring-[#C93B3B]'
+                            : 'border-[#E7E5DF] focus:border-[#16201C]'
+                        }`}
+                      />
+                      {fieldErrors.nuevo_proveedor_ruc && (
+                        <p role="alert" className="text-[11px] text-[#C93B3B] mt-1 font-medium">
+                          {fieldErrors.nuevo_proveedor_ruc}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <select
@@ -243,16 +326,31 @@ export function NuevaCompraDrawer({
 
               <div>
                 <label className="block text-[12px] font-medium text-[#16201C] mb-1">
-                  N° Factura / Boleta
+                  N° Factura / Boleta *
                 </label>
                 <input
                   type="text"
                   required
                   placeholder="F001-000123"
                   value={numeroComprobante}
-                  onChange={(e) => setNumeroComprobante(e.target.value)}
-                  className="w-full rounded-[6px] border border-[#E7E5DF] px-3 py-1.5 text-[13px] text-[#16201C] font-mono focus:outline-none focus:border-[#16201C]"
+                  onChange={(e) => handleNumeroComprobanteChange(e.target.value)}
+                  onBlur={() => {
+                    if (!numeroComprobante.trim()) {
+                      setFieldErrors((prev) => ({ ...prev, numero_comprobante: 'El número de comprobante es obligatorio.' }))
+                    }
+                  }}
+                  aria-invalid={!!fieldErrors.numero_comprobante}
+                  className={`w-full rounded-[6px] border px-3 py-1.5 text-[13px] text-[#16201C] font-mono focus:outline-none ${
+                    fieldErrors.numero_comprobante
+                      ? 'border-[#C93B3B] focus:border-[#C93B3B] focus:ring-1 focus:ring-[#C93B3B]'
+                      : 'border-[#E7E5DF] focus:border-[#16201C]'
+                  }`}
                 />
+                {fieldErrors.numero_comprobante && (
+                  <p role="alert" className="text-[11px] text-[#C93B3B] mt-1 font-medium">
+                    {fieldErrors.numero_comprobante}
+                  </p>
+                )}
               </div>
             </div>
 

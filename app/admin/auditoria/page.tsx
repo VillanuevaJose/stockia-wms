@@ -52,27 +52,35 @@ export default async function AuditoriaPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
-              {logs.map((log) => (
-                <tr key={log.id} className="hover:bg-slate-50/80 transition-colors font-mono">
-                  <td className="py-2.5 px-3 whitespace-nowrap">
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border ${accionBadge(log.accion)}`}>
-                      {log.accion}
-                    </span>
-                  </td>
-                  <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
-                    public.{log.tabla}
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
-                    {log.registro_id}
-                  </td>
-                  <td className="py-2.5 px-3 text-slate-700 font-sans font-medium whitespace-nowrap">
-                    {log.usuario_nombre}
-                  </td>
-                  <td className="py-2.5 px-3 text-right text-slate-500 whitespace-nowrap tabular-nums">
-                    {new Date(log.created_at).toLocaleString('es-PE')}
+              {logs.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-slate-400 text-xs font-sans">
+                    No hay eventos registrados aún. Los registros aparecerán automáticamente cuando se realicen operaciones en el sistema.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                logs.map((log) => (
+                  <tr key={log.id} className="hover:bg-slate-50/80 transition-colors font-mono">
+                    <td className="py-2.5 px-3 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border ${accionBadge(log.accion)}`}>
+                        {log.accion}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 font-bold text-slate-900 whitespace-nowrap">
+                      public.{log.tabla}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
+                      {log.registro_id}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-700 font-sans font-medium whitespace-nowrap">
+                      {log.usuario_nombre}
+                    </td>
+                    <td className="py-2.5 px-3 text-right text-slate-500 whitespace-nowrap tabular-nums">
+                      {new Date(log.created_at).toLocaleString('es-PE')}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
