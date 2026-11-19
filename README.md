@@ -1,127 +1,177 @@
 # Stockia · Sistema de Gestión de Almacén e Inventario (WMS)
 
-**Stockia** es un sistema SaaS multi-tenant de gestión de almacenes, control de inventario físico en tiempo real, trazabilidad por Kárdex valorizado, compras a proveedores y punto de venta (POS) para mostrador. Desarrollado con Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS v4 y Supabase (PostgreSQL transaccional con RLS estricto).
+[![CI Pipeline](https://github.com/VillanuevaJose/stockia-wms/actions/workflows/ci.yml/badge.svg)](https://github.com/VillanuevaJose/stockia-wms/actions)
+![Next.js](https://img.shields.io/badge/Next.js-16.4-black?logo=next.js)
+![React](https://img.shields.io/badge/React-19-blue?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)
+![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL%20RLS-3ECF8E?logo=supabase)
+![Vitest](https://img.shields.io/badge/Vitest-Unit%20Tests-green?logo=vitest)
+
+**Stockia** es un sistema SaaS multi-tenant para la gestión de almacenes físicos, control de existencias en tiempo real, trazabilidad por Kardex valorizado (método costo promedio ponderado), abastecimiento y punto de venta (POS) para mostrador con facturación electrónica adaptada a la normativa SUNAT (UBL 2.1).
 
 ---
 
-## 1. Requisitos Previos
+## 🏗 Arquitectura del Sistema
 
-- **Node.js**: Versión 20.x o superior (recomendado Node 22 o 24 LTS).
-- **Gestor de paquetes**: `npm` v10+ (o `pnpm` / `bun`).
-- **Base de Datos**: Proyecto en [Supabase](https://supabase.com).
+El sistema implementa una arquitectura orientada a la consistencia transaccional y el aislamiento estricto de datos entre empresas (tenants):
+
+```mermaid
+flowchart TD
+    subgraph Frontend["Frontend (Next.js 16 / React 19)"]
+        UI["Punto de Venta (POS) & Dashboard"]
+        Client["Browser Camera Barcode Scanner / Optical HUD"]
+        Forms["Formularios Validados con Zod"]
+    end
+
+    subgraph Server["Next.js App Router (Server-Side)"]
+        Proxy["Middleware de Autenticación (@supabase/ssr)"]
+        Actions["Server Actions / API Routes"]
+        Cache["In-Memory Cache con Namespace de Tenant"]
+        UBL["SUNAT UBL 2.1 XML & QR Builder"]
+    end
+
+    subgraph Database["PostgreSQL / Supabase Engine"]
+        RLS["Row Level Security (RLS) - mi_negocio_id()"]
+        RPC["Funciones Transaccionales Atómicas (FOR UPDATE)"]
+        Tables["Tablas Relacionales (Productos, Kardex, Ventas)"]
+    end
+
+    UI --> Forms
+    Forms --> Actions
+    Proxy --> Actions
+    Actions --> Cache
+    Actions --> UBL
+    Actions --> RPC
+    RPC --> Tables
+    Tables --> RLS
+```
 
 ---
 
-## 2. Variables de Entorno
+## ⚡ Decisiones Técnicas & Ingeniería de Software
 
-Copia la plantilla `.env.example` como `.env.local` y configura tus credenciales:
+### 1. Control de Concurrencia y Prevención de Stock Negativo
+En entornos de ventas rápidas y mostradores concurrentes, las validaciones de stock en el cliente o en el servidor Next.js son vulnerables a condiciones de carrera (*race conditions*).
+- **Solución implementada**: Las transacciones de venta, compra y transferencia inter-sedes se ejecutan mediante procedimientos almacenados en PostgreSQL (`registrar_venta`, `registrar_movimiento`) que utilizan bloqueos pesimistas:
+  ```sql
+  SELECT stock_actual FROM public.inventario
+  WHERE producto_id = v_prod_id AND almacen_id = v_alm_id
+  FOR UPDATE;
+  ```
+- **Garantía**: Si dos terminales intentan vender la última unidad al mismo milisegundo, la base de datos serializa las peticiones de forma atómica; la primera descuenta el stock y la segunda lanza una excepción `45000: Stock insuficiente`.
 
+### 2. Aislamiento Multi-Tenant (Seguridad en Capas)
+- **Base de Datos**: Políticas activas de Row Level Security (RLS) en todas las tablas sensibles (`productos`, `ventas`, `compras`, `movimientos`, `inventario`). Cada consulta evalúa la función `mi_negocio_id()` basada en `auth.uid()`, impidiendo ataques de Insecure Direct Object References (IDOR).
+- **Caché en Memoria**: El servicio de aceleración `withFastCache` estructura sus claves mediante `${tenantId}:${key}`, evitando la contaminación cruzada de datos entre negocios en el mismo proceso de Node.js.
+
+### 3. Facturación Electrónica SUNAT (Estándar UBL 2.1)
+El módulo `lib/sunat/ubl-builder.ts` implementa la especificación técnica de SUNAT para comprobantes de pago electrónicos:
+- **Desglose tributario**: Cálculo preciso de base imponible y débito fiscal (18% IGV).
+- **Firma digital**: Generación del Digest Value usando hashing criptográfico SHA-256 sobre la estructura canónica del XML.
+- **Código QR oficial**: Construcción de la cadena delimitada por plecas (`|`) según la Resolución de Superintendencia N° 150-2021/SUNAT.
+
+### 4. Trazabilidad por Kardex y Valorización
+Cada movimiento físico (`ENTRADA_COMPRA`, `SALIDA_VENTA`, `AJUSTE_POSITIVO`, `AJUSTE_NEGATIVO`, `TRANSFERENCIA`) queda registrado en el Kardex con su costo unitario histórico y el saldo resultante en unidades y valor monetario.
+
+---
+
+## 🛠 Stack Tecnológico
+
+| Capa | Tecnología | Justificación |
+| :--- | :--- | :--- |
+| **Framework** | Next.js 16.4 (App Router) | Server Components para rendimiento inicial y Server Actions para mutaciones tipo-seguras sin APIs REST redundantes. |
+| **Frontend** | React 19 + Tailwind CSS v4 | Nuevos hooks (`useTransition`, `useActionState`), tipografía del sistema `font-sans` limpia y rendimiento optimizado. |
+| **Tipado & Validación** | TypeScript 5 + Zod | Tipado estricto en tiempo de compilación y validación en tiempo de ejecución en formularios y payloads de entrada. |
+| **Base de Datos & Auth** | Supabase (PostgreSQL 15) | Autenticación con cookies HttpOnly seguras vía `@supabase/ssr` y lógica transaccional ACID en base de datos. |
+| **Testing** | Vitest 2.x | Suite de pruebas unitarias rápida con soporte nativo para TypeScript y aliases de ruta. |
+| **CI/CD** | GitHub Actions | Pipeline automatizado que valida linting, comprobación de tipos, tests unitarios y compilación de producción en cada push. |
+
+---
+
+## 🧪 Pruebas Automatizadas & CI/CD
+
+El repositorio cuenta con una suite de pruebas unitarias ejecutadas con **Vitest**:
+
+```bash
+# Ejecutar todas las pruebas unitarias
+npm test
+
+# Ejecutar con reporte de cobertura
+npx vitest run --coverage
+```
+
+### Casos de prueba cubiertos:
+1. `tests/unit/ubl-builder.test.ts`:
+   - Detección de tipo de comprobante (Boleta `03` vs Factura `01`).
+   - Cálculo de base imponible y 18% IGV.
+   - Generación de Digest Value SHA-256.
+   - Formato oficial del código QR SUNAT.
+2. `tests/unit/auth-validations.test.ts`:
+   - Validación de emails corporativos.
+   - Restricciones de complejidad de contraseña (mayúsculas, números, símbolos).
+   - Formato de RUC (11 dígitos numéricos).
+3. `tests/unit/fast-cache.test.ts`:
+   - Aislamiento estricto de claves por tenant.
+   - Aciertos y expiración de caché TTL.
+   - Invalidación selectiva por prefijo.
+
+---
+
+## 🚀 Instalación y Puesta en Marcha Local
+
+### 1. Clonar el repositorio
+```bash
+git clone https://github.com/VillanuevaJose/stockia-wms.git
+cd stockia-wms
+```
+
+### 2. Instalar dependencias
+```bash
+npm install
+```
+
+### 3. Configurar variables de entorno
+Copia la plantilla `.env.example` como `.env.local`:
 ```bash
 cp .env.example .env.local
 ```
 
-### Variables requeridas:
-- `NEXT_PUBLIC_SUPABASE_URL`: URL del proyecto Supabase.
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Clave anónima pública del proyecto.
-- `SUPABASE_SERVICE_ROLE_KEY`: Clave de servicio de administración (usada estrictamente en servidor para aprovisionar subusuarios y sincronizar perfiles con RBAC).
-
-### Variables opcionales (Pasarela Culqi):
-- `NEXT_PUBLIC_CULQI_PUBLIC_KEY`: Llave pública de Culqi.
-- `CULQI_SECRET_KEY`: Llave secreta de Culqi.
-*(Si estas dos variables no se configuran, la pasarela Culqi se mantendrá oculta automáticamente sin arrojar errores).*
-
----
-
-## 3. Configuración de Base de Datos en Supabase
-
-En el **SQL Editor** de tu proyecto Supabase, ejecuta los scripts ubicados en la carpeta `supabase/` en el siguiente orden estricto:
-
-1. **`supabase/01_schema.sql`**: Crea las 17 tablas estándar con claves UUID, índices optimizados y restricciones de integridad.
-2. **`supabase/02_funciones.sql`**: Despliega las funciones transaccionales con bloqueo pesimista `FOR UPDATE` (`registrar_movimiento`, `registrar_compra`, `registrar_venta`, `registrar_negocio_y_admin`).
-3. **`supabase/03_rls.sql`**: Activa la seguridad a nivel de filas (Row Level Security) garantizando el aislamiento absoluto entre empresas.
-4. **`supabase/04_seed.sql`** *(OPCIONAL / SOLO DEMO)*: Datos sintéticos para pruebas iniciales si deseas explorar la app con registros de ejemplo.
-5. **`supabase/05_limpiar_datos.sql`**: Script de `TRUNCATE CASCADE` para vaciar todas las tablas de datos y dejar la base de datos limpia al 100% para entregar a un cliente real.
-
----
-
-## 4. Instalación y Ejecución
-
-```bash
-# 1. Instalar dependencias
-npm install
-
-# 2. Iniciar servidor de desarrollo
-npm run dev
-
-# 3. Compilación para producción
-npm run build
-npm run start
+Completa las variables de tu proyecto Supabase:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key-de-supabase
+SUPABASE_SERVICE_ROLE_KEY=tu-service-role-key-de-supabase
 ```
 
-La aplicación estará accesible en `http://localhost:3000`.
+### 4. Configurar la base de datos
+En el SQL Editor de tu proyecto Supabase, ejecuta los scripts de la carpeta `supabase/` en este orden:
+1. `supabase/01_schema.sql` (Tablas, llaves primarias UUID, llaves foráneas e índices)
+2. `supabase/02_funciones.sql` (Funciones transaccionales y RPCs con `FOR UPDATE`)
+3. `supabase/03_rls.sql` (Políticas de Row Level Security por tenant)
+
+### 5. Iniciar la aplicación
+```bash
+# Desarrollo
+npm run dev
+
+# Compilación y producción
+npm run build
+npm start
+```
+Abre [http://localhost:3000](http://localhost:3000) en tu navegador.
 
 ---
 
-## 5. Puesta en Marcha: Primer Usuario y Negocio
+## 👥 Roles de Usuario (RBAC)
 
-1. Dirígete a la ruta `/registro`.
-2. Completa los datos iniciales:
-   - **Nombre y Apellidos**: Nombre del administrador o dueño.
-   - **Nombre de la Empresa o Almacén**: Nombre del negocio (ej. "Comercializadora Andina S.A.C.").
-   - **RUC** *(Opcional)*: 11 dígitos numéricos.
-   - **Correo corporativo** y **Contraseña**.
-3. Al enviar el formulario, el sistema ejecuta de forma atómica:
-   - Crea el usuario en Supabase Auth.
-   - Crea la entidad `negocio` (tenant).
-   - Genera el primer almacén `Principal` (ALM-01).
-   - Registra al usuario con rol `admin` en `public.usuarios`.
-   - Inicializa las unidades de medida base (UND, KG, MTR, LT, CJ) y la categoría "General".
-4. Ingresarás directamente a `/admin`.
-
----
-
-## 6. Gestión de Roles y Permisos (RBAC)
-
-El sistema soporta 3 perfiles operativos:
-
-| Rol | Privilegios y Rutas Permitidas |
+| Rol | Alcance Operativo |
 | :--- | :--- |
-| **Administrador (`admin`)** | Acceso irrestricto: catálogo, inventario, compras, ventas, usuarios, sedes, configuración y auditoría. |
-| **Jefe de Almacén (`almacenero`)** | Operaciones de custodia: Inventario físico, Kardex de movimientos, compras a proveedores y catálogo de productos. |
-| **Vendedor (`vendedor`)** | Operaciones de mostrador: Punto de Venta (POS) `/vendedor`, consulta de stock y catálogo de productos en solo lectura. |
-
-### Cómo crear cuentas para el personal:
-Desde `/admin/usuarios`, el administrador hace clic en **"Nuevo Colaborador"**, ingresa los datos del operador, selecciona su rol (`almacenero` o `vendedor`) y asigna una contraseña temporal.
+| **Administrador (`admin`)** | Control total: gestión de almacenes/sedes, usuarios y roles, compras, ventas, catálogo, auditoría de turnos y configuración. |
+| **Jefe de Almacén (`almacenero`)** | Operaciones de custodia: inventario físico, trazabilidad en Kardex, recepción de compras y catálogo de productos. |
+| **Vendedor (`vendedor`)** | Mostrador y POS: punto de venta táctil `/vendedor`, lector óptico de código de barras, arqueo de turno y cobro. |
 
 ---
 
-## 7. Guía de Pruebas Manuales Paso a Paso
+## 📄 Licencia
 
-Para comprobar la operatividad completa de extremo a extremo:
-
-1. **Creación de Producto**:
-   - Ingresa a `/admin/productos` y presiona **"Nuevo Producto"**.
-   - Ingresa Nombre, SKU único, Costo (ej. S/ 20.00), Precio de Venta (ej. S/ 35.00) y Stock Inicial (ej. 10 unidades).
-   - Verifica que el producto aparezca en la tabla y que el stock inicial se refleje en `/admin/inventario`.
-2. **Recepción de Compra (Abastecimiento)**:
-   - Ve a `/admin/compras` y abre **"Nueva Orden de Compra"**.
-   - Selecciona o escribe un nuevo proveedor, ingresa N° de Factura, agrega el producto y confirma.
-   - Verifica que se genere una `ENTRADA` automática en `/admin/movimientos` (Kardex) y suba el stock.
-3. **Punto de Venta (Venta en Mostrador)**:
-   - Dirígete a `/vendedor` (o accede desde el menú lateral).
-   - Busca el producto por nombre o SKU y presiona "+".
-   - Selecciona método de pago (Efectivo o Yape/Plin) y pulsa **"Registrar Venta"**.
-   - Confirma la emisión del comprobante (B001) y verifica que el stock disponible haya disminuido en tiempo real.
-4. **Trazabilidad en Kardex**:
-   - Revisa `/admin/movimientos` y filtra por "SALIDA" o "ENTRADA" para auditar cada transacción.
-5. **Exportación de Reportes**:
-   - En `/admin/inventario`, haz clic en **"Exportar CSV"**. Descarga y abre el archivo en Excel para validar el formato y valorización.
-
----
-
-## 8. Despliegue en Producción
-
-El proyecto está preparado para desplegarse con un clic en **Vercel**:
-1. Conecta tu repositorio de GitHub a Vercel.
-2. Agrega las variables de entorno de producción (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
-3. Despliega con el framework preset `Next.js`.
+Este proyecto está bajo la Licencia MIT.
