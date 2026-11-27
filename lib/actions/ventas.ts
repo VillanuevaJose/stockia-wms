@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createClient } from '../supabase/server'
+import { createAdminClient } from '../supabase/admin'
 import { invalidateFastCache } from '../cache/fast-cache'
 
 const itemVentaSchema = z.object({
@@ -16,6 +17,7 @@ const registrarVentaSchema = z.object({
   metodo_pago: z.enum(['EFECTIVO', 'TARJETA', 'TRANSFERENCIA', 'CULQI', 'OTRO']),
   items: z.array(itemVentaSchema).min(1, 'Agrega al menos un producto al carrito'),
   culqi_charge_id: z.string().optional().nullable(),
+  idempotency_key: z.string().uuid().optional(),
 })
 
 export type VentaResult = {
@@ -55,6 +57,32 @@ export async function registrarVentaAction(
   }
 
   const negocio_id = usuario.negocio_id
+
+  // Verificar idempotencia si la venta proviene de cola Offline o reintento de red
+  if (validated.data.idempotency_key) {
+    const adminClient = createAdminClient()
+    const { data: previa } = await adminClient
+      .from('auditoria')
+      .select('datos_nuevos')
+      .eq('negocio_id', negocio_id)
+      .eq('tabla', 'pos_idempotency')
+      .eq('registro_id', validated.data.idempotency_key)
+      .maybeSingle()
+
+    if (previa?.datos_nuevos) {
+      const prevPayload = previa.datos_nuevos as {
+        venta_id?: string
+        numero_comprobante?: string
+        total?: number
+      }
+      return {
+        success: true,
+        venta_id: prevPayload.venta_id,
+        numero_comprobante: prevPayload.numero_comprobante,
+        total: prevPayload.total,
+      }
+    }
+  }
 
   // Obtener almacén: priorizar el enviado explícitamente, luego la sede del usuario, y finalmente la principal
   let almacen_id = validated.data.almacen_id || usuario.almacen_id
@@ -212,8 +240,31 @@ export async function registrarVentaAction(
         referencia_externa: validated.data.culqi_charge_id || `Pago de ${numComprobante}`,
       })
 
+      if (validated.data.idempotency_key) {
+        try {
+          const adminClient = createAdminClient()
+          await adminClient.from('auditoria').insert({
+            negocio_id,
+            usuario_id: user.id,
+            tabla: 'pos_idempotency',
+            registro_id: validated.data.idempotency_key,
+            accion: 'VENTA_IDEMPOTENTE',
+            datos_nuevos: {
+              venta_id: newVenta.id,
+              numero_comprobante: numComprobante,
+              total: totalCalculado,
+            },
+          })
+        } catch {
+          // ignore secondary log error
+        }
+      }
+
       invalidateFastCache('ventas')
       invalidateFastCache('inventario')
+      invalidateFastCache('dashboard-data')
+      invalidateFastCache('reabastecimiento-rop')
+      invalidateFastCache('anomalias-operativas')
       revalidatePath('/vendedor')
       revalidatePath('/admin/ventas')
       revalidatePath('/admin/inventario')
@@ -231,8 +282,31 @@ export async function registrarVentaAction(
     return { success: false, error: rpcErr.message }
   }
 
+  if (validated.data.idempotency_key) {
+    try {
+      const adminClient = createAdminClient()
+      await adminClient.from('auditoria').insert({
+        negocio_id,
+        usuario_id: user.id,
+        tabla: 'pos_idempotency',
+        registro_id: validated.data.idempotency_key,
+        accion: 'VENTA_IDEMPOTENTE',
+        datos_nuevos: {
+          venta_id: ventaResp?.venta_id,
+          numero_comprobante: ventaResp?.numero_comprobante || 'B001',
+          total: ventaResp?.total || totalCalculado,
+        },
+      })
+    } catch {
+      // ignore secondary log error
+    }
+  }
+
   invalidateFastCache('ventas')
   invalidateFastCache('inventario')
+  invalidateFastCache('dashboard-data')
+  invalidateFastCache('reabastecimiento-rop')
+  invalidateFastCache('anomalias-operativas')
   revalidatePath('/vendedor')
   revalidatePath('/admin/ventas')
   revalidatePath('/admin/inventario')

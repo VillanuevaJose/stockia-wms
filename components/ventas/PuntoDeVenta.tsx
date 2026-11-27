@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition, useEffect, useCallback, useMemo } from 'react'
+import { useState, useTransition, useEffect, useCallback, useMemo, useSyncExternalStore } from 'react'
 import {
   Search,
   ShoppingCart,
@@ -22,7 +22,31 @@ import {
   type VentaResult,
   type ResumenCaja,
 } from '../../lib/actions/ventas'
+import {
+  enqueueOfflineSale,
+  getOfflineSalesQueue,
+  markOfflineSaleError,
+  removeOfflineSale,
+  saveCatalogSnapshot,
+} from '../../lib/offline/pos-queue'
 import { PosCameraModal, PosArqueoCajaModal, PosVentaExitosa } from './pos'
+
+function subscribeOnlineStatus(cb: () => void) {
+  window.addEventListener('online', cb)
+  window.addEventListener('offline', cb)
+  return () => {
+    window.removeEventListener('online', cb)
+    window.removeEventListener('offline', cb)
+  }
+}
+
+function getOnlineSnapshot() {
+  return navigator.onLine
+}
+
+function getServerOnlineSnapshot() {
+  return true
+}
 
 interface ProductoItem {
   id: string
@@ -78,9 +102,88 @@ export function PuntoDeVenta({
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [ventaExitosa, setVentaExitosa] = useState<(VentaResult & { vuelto?: number }) | null>(null)
 
-  // Catálogo dinámico reflejando el stock exacto de la sede seleccionada
+  const isOnline = useSyncExternalStore(
+    subscribeOnlineStatus,
+    getOnlineSnapshot,
+    getServerOnlineSnapshot
+  )
+  const [pendingOfflineCount, setPendingOfflineCount] = useState(0)
+  const [isSyncingOffline, setIsSyncingOffline] = useState(false)
+  const [syncNotice, setSyncNotice] = useState<string | null>(null)
+
+  const sincronizarColaOffline = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return
+    const queue = await getOfflineSalesQueue()
+    setPendingOfflineCount(queue.length)
+    if (queue.length === 0) return
+
+    setIsSyncingOffline(true)
+    let sincronizadas = 0
+    for (const sale of queue) {
+      try {
+        const res = await registrarVentaAction({
+          almacen_id: sale.almacen_id,
+          metodo_pago: sale.metodo_pago,
+          items: sale.items.map((i) => ({ producto_id: i.producto_id, cantidad: i.cantidad })),
+          culqi_charge_id: sale.culqi_charge_id,
+          idempotency_key: sale.idempotency_key,
+        })
+        if (res.success) {
+          await removeOfflineSale(sale.idempotency_key)
+          sincronizadas++
+        } else {
+          await markOfflineSaleError(sale.idempotency_key, res.error || 'Error de sincronización')
+        }
+      } catch {
+        // Detener si se pierde red a mitad de sincronización
+        break
+      }
+    }
+
+    const restantes = await getOfflineSalesQueue()
+    setPendingOfflineCount(restantes.length)
+    setIsSyncingOffline(false)
+
+    if (sincronizadas > 0) {
+      setSyncNotice(
+        `${sincronizadas} ${sincronizadas === 1 ? 'venta offline sincronizada' : 'ventas offline sincronizadas'} con el servidor.`
+      )
+      setTimeout(() => setSyncNotice(null), 5000)
+    }
+  }, [])
+
+  // Guardar catálogo offline en IndexedDB y sincronizar pendientes al reconectar
+  useEffect(() => {
+    if (initialProductos.length > 0) {
+      void saveCatalogSnapshot(initialProductos)
+    }
+    void getOfflineSalesQueue().then((q) => {
+      setPendingOfflineCount(q.length)
+      if (q.length > 0 && navigator.onLine) {
+        void sincronizarColaOffline()
+      }
+    })
+
+    const onReconnect = () => {
+      void sincronizarColaOffline()
+    }
+    window.addEventListener('online', onReconnect)
+    return () => window.removeEventListener('online', onReconnect)
+  }, [initialProductos, sincronizarColaOffline])
+
+  // Catálogo dinámico reflejando el stock exacto de la sede seleccionada (con fallback local si está offline)
   const catalogo = useMemo(() => {
-    const baseList = query.trim() ? searchResults : initialProductos
+    const qLower = query.trim().toLowerCase()
+    const baseList = qLower
+      ? isOnline && searchResults.length > 0
+        ? searchResults
+        : initialProductos.filter(
+            (p) =>
+              p.nombre.toLowerCase().includes(qLower) ||
+              p.sku.toLowerCase().includes(qLower) ||
+              (p.codigo_barras && p.codigo_barras.toLowerCase().includes(qLower))
+          )
+      : initialProductos
     if (!stockPorAlmacen || !selectedAlmacenId) return baseList
 
     const mapped = baseList.map((p) => {
@@ -96,7 +199,7 @@ export function PuntoDeVenta({
     }
 
     return mapped
-  }, [query, searchResults, initialProductos, stockPorAlmacen, selectedAlmacenId, soloConStock])
+  }, [query, searchResults, initialProductos, stockPorAlmacen, selectedAlmacenId, soloConStock, isOnline])
 
   const handleSedeChange = (nuevoId: string) => {
     if (carrito.length > 0) {
@@ -308,26 +411,67 @@ export function PuntoDeVenta({
     }
 
     startSubmit(async () => {
+      const idempotencyKey = crypto.randomUUID()
       const culqiChargeId =
         metodoPago === 'CULQI' ? `chr_test_${Date.now().toString().slice(-8)}` : undefined
 
-      const res = await registrarVentaAction({
-        almacen_id: selectedAlmacenId || undefined,
-        metodo_pago: metodoPago,
-        items: carrito.map((i) => ({ producto_id: i.id, cantidad: i.cantidad })),
-        culqi_charge_id: culqiChargeId,
-      })
-
-      if (!res.success) {
-        setErrorMsg(res.error || 'Ocurrió un error al procesar la venta.')
-      } else {
+      const guardarEnColaOffline = async () => {
+        await enqueueOfflineSale({
+          idempotency_key: idempotencyKey,
+          created_at: new Date().toISOString(),
+          almacen_id: selectedAlmacenId || undefined,
+          metodo_pago: metodoPago,
+          items: carrito.map((i) => ({
+            producto_id: i.id,
+            cantidad: i.cantidad,
+            nombre: i.nombre,
+          })),
+          total_estimado: total,
+          vuelto: metodoPago === 'EFECTIVO' ? vuelto : undefined,
+          culqi_charge_id: culqiChargeId,
+          estado: 'PENDIENTE',
+        })
+        const q = await getOfflineSalesQueue()
+        setPendingOfflineCount(q.length)
         setVentaExitosa({
-          ...res,
+          success: true,
+          numero_comprobante: `OFFLINE-${idempotencyKey.slice(0, 8).toUpperCase()}`,
+          total,
           vuelto: metodoPago === 'EFECTIVO' ? vuelto : undefined,
         })
         setCarrito([])
         setQuery('')
         setMontoRecibido('')
+      }
+
+      if (!isOnline) {
+        await guardarEnColaOffline()
+        return
+      }
+
+      try {
+        const res = await registrarVentaAction({
+          almacen_id: selectedAlmacenId || undefined,
+          metodo_pago: metodoPago,
+          items: carrito.map((i) => ({ producto_id: i.id, cantidad: i.cantidad })),
+          culqi_charge_id: culqiChargeId,
+          idempotency_key: idempotencyKey,
+        })
+
+        if (!res.success) {
+          setErrorMsg(res.error || 'Ocurrió un error al procesar la venta.')
+        } else {
+          setVentaExitosa({
+            ...res,
+            vuelto: metodoPago === 'EFECTIVO' ? vuelto : undefined,
+          })
+          setCarrito([])
+          setQuery('')
+          setMontoRecibido('')
+        }
+      } catch {
+        // Si falla la red durante el cobro, resguardar en cola Offline
+        await guardarEnColaOffline()
       }
     })
   }
@@ -385,7 +529,28 @@ export function PuntoDeVenta({
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Indicador de conectividad y cola Offline */}
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-[6px] border border-[#E7E5DF] bg-[#FAFAF7] text-[12px]">
+            <span
+              className={`w-2 h-2 rounded-full ${isOnline ? 'bg-[#2A7A4C]' : 'bg-[#C97D1A]'}`}
+              aria-hidden="true"
+            />
+            <span className="font-semibold text-[#16201C]">
+              {isOnline ? 'En línea' : 'Modo Offline'}
+            </span>
+            {pendingOfflineCount > 0 && (
+              <button
+                type="button"
+                onClick={() => void sincronizarColaOffline()}
+                disabled={!isOnline || isSyncingOffline}
+                className="ml-1 px-2 py-0.5 rounded-[4px] bg-[#16201C] text-[#FAFAF7] text-[11px] font-semibold disabled:opacity-40"
+              >
+                {isSyncingOffline ? 'Sincronizando...' : `Sincronizar (${pendingOfflineCount})`}
+              </button>
+            )}
+          </div>
+
           {/* Botón Lector con Cámara de Celular */}
           <button
             type="button"
@@ -408,6 +573,14 @@ export function PuntoDeVenta({
           </button>
         </div>
       </div>
+
+      {/* Banner de Sincronización Offline */}
+      {syncNotice && (
+        <div className="mb-4 p-3 rounded-[6px] bg-[#FAFAF7] border border-[#2A7A4C] text-[#16201C] text-[13px] font-medium flex items-center gap-2">
+          <CheckCircle2 size={16} className="text-[#2A7A4C] shrink-0" />
+          <span>{syncNotice}</span>
+        </div>
+      )}
 
       {/* Banner de Feedback al Escanear */}
       {scannedFeedback && (
