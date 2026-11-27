@@ -25,8 +25,8 @@ export default async function ComprasPage({ searchParams }: ComprasPageProps) {
 
   // Consultar proveedores, productos y almacenes
   const [{ data: proveedores }, { data: productos }, { data: almacenes }] = await Promise.all([
-    supabase.from('proveedor').select('id, razon_social').eq('activo', true).order('razon_social'),
-    supabase.from('productos').select('id, nombre, sku, costo').eq('activo', true).order('nombre'),
+    supabase.from('proveedor').select('id, razon_social, ruc').eq('activo', true).order('razon_social'),
+    supabase.from('productos').select('id, nombre, sku, codigo_barras, costo').eq('activo', true).order('nombre'),
     supabase.from('almacen').select('id, nombre').eq('activo', true).order('es_principal', { ascending: false }),
   ])
 
@@ -82,11 +82,13 @@ export default async function ComprasPage({ searchParams }: ComprasPageProps) {
           proveedores={(proveedores || []).map((p) => ({
             id: p.id,
             nombre: p.razon_social,
+            ruc: p.ruc,
           }))}
           productos={(productos || []).map((p) => ({
             id: p.id,
             nombre: p.nombre,
             sku: p.sku,
+            codigo_barras: p.codigo_barras,
             costo: Number(p.costo) || 0,
           }))}
           almacenes={almacenesFormatted}

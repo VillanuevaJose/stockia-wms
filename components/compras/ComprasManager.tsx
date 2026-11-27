@@ -7,8 +7,8 @@ import type { CompraRow } from '../../lib/queries/operaciones'
 
 interface Props {
   compras: CompraRow[]
-  proveedores: { id: string; nombre: string }[]
-  productos: { id: string; nombre: string; sku: string; costo: number }[]
+  proveedores: { id: string; nombre: string; ruc?: string | null }[]
+  productos: { id: string; nombre: string; sku: string; codigo_barras?: string | null; costo: number }[]
   almacenes: { id: string; nombre: string }[]
 }
 
@@ -86,7 +86,7 @@ export function ComprasManager({
               ) : (
                 compras.map((c) => (
                   <tr key={c.id} className="hover:bg-[#FAFAF7] transition-colors">
-                    <td className="py-2.5 px-3.5 font-mono font-medium whitespace-nowrap">
+                    <td className="py-2.5 px-3.5 font-medium whitespace-nowrap">
                       {c.numero_factura}
                     </td>
                     <td className="py-2.5 px-3.5 font-medium max-w-xs truncate">
@@ -95,7 +95,7 @@ export function ComprasManager({
                     <td className="py-2.5 px-3.5 text-[#6B7A72] whitespace-nowrap">
                       {c.solicitante_nombre}
                     </td>
-                    <td className="py-2.5 px-3.5 text-right font-mono font-bold tabular-nums">
+                    <td className="py-2.5 px-3.5 text-right font-bold tabular-nums">
                       S/ {c.total.toLocaleString('es-PE', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
@@ -104,7 +104,7 @@ export function ComprasManager({
                         {c.estado}
                       </span>
                     </td>
-                    <td className="py-2.5 px-3.5 text-right font-mono text-[12px] text-[#6B7A72] tabular-nums whitespace-nowrap">
+                    <td className="py-2.5 px-3.5 text-right text-[12px] text-[#6B7A72] tabular-nums whitespace-nowrap">
                       {new Date(c.fecha).toLocaleDateString('es-PE')}
                     </td>
                   </tr>
