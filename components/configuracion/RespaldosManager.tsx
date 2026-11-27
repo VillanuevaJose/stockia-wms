@@ -13,6 +13,7 @@ import {
 } from '../ui/icons'
 import {
   generarSnapshotAutomaticoAction,
+  restaurarRespaldoJsonAction,
   verificarRespaldoJsonAction,
   type RespaldoHistorialItem,
   type VerificacionRespaldoResult,
@@ -59,6 +60,8 @@ export function RespaldosManager({ historialInicial, negocioId }: Props) {
 
   const [isPending, startTransition] = useTransition()
   const [isDownloading, setIsDownloading] = useState(false)
+  const [uploadedJsonText, setUploadedJsonText] = useState<string | null>(null)
+  const [confirmandoRestore, setConfirmandoRestore] = useState(false)
   const [verificacion, setVerificacion] = useState<VerificacionRespaldoResult | null>(null)
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
 
@@ -143,11 +146,31 @@ export function RespaldosManager({ historialInicial, negocioId }: Props) {
 
   const handleVerificarArchivo = async (file: File) => {
     setVerificacion(null)
+    setConfirmandoRestore(false)
     setFeedback(null)
     const texto = await file.text()
+    setUploadedJsonText(texto)
     startTransition(async () => {
       const res = await verificarRespaldoJsonAction(texto)
       setVerificacion(res)
+    })
+  }
+
+  const handleRestaurar = () => {
+    if (!uploadedJsonText) return
+    setFeedback(null)
+    startTransition(async () => {
+      const res = await restaurarRespaldoJsonAction(uploadedJsonText)
+      setConfirmandoRestore(false)
+      if (!res.success) {
+        setFeedback({ type: 'error', message: res.error || 'No se pudo restaurar el respaldo.' })
+        return
+      }
+      setFeedback({
+        type: 'success',
+        message: `Respaldo restaurado con éxito: ${res.resumen?.productos ?? 0} productos, ${res.resumen?.categorias ?? 0} categorías, ${res.resumen?.proveedores ?? 0} proveedores y existencias sincronizadas.`,
+      })
+      router.refresh()
     })
   }
 
@@ -328,6 +351,41 @@ export function RespaldosManager({ historialInicial, negocioId }: Props) {
                         <strong className="text-[#16201C]">{v}</strong> {k}
                       </span>
                     ))}
+                  </div>
+                )}
+
+                {verificacion.misma_empresa && uploadedJsonText && (
+                  <div className="pt-3 mt-2 border-t border-[#E7E5DF] flex flex-wrap items-center justify-between gap-3">
+                    <span className="text-[11px] text-[#6B7A72]">
+                      Si borraste o modificaste productos, puedes restaurarlos exactamente como estaban en este respaldo.
+                    </span>
+                    {confirmandoRestore ? (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleRestaurar}
+                          disabled={isPending}
+                          className="px-3.5 py-1.5 rounded-[6px] bg-[#2A7A4C] text-white text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+                        >
+                          {isPending ? 'Restaurando...' : 'Confirmar Restauración'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmandoRestore(false)}
+                          className="px-2.5 py-1.5 rounded-[6px] border border-[#E7E5DF] bg-white text-xs text-[#16201C]"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmandoRestore(true)}
+                        className="px-3.5 py-1.5 rounded-[6px] bg-[#16201C] text-[#FAFAF7] text-xs font-semibold hover:opacity-90"
+                      >
+                        Restaurar Respaldo Aquí
+                      </button>
+                    )}
                   </div>
                 )}
               </>
