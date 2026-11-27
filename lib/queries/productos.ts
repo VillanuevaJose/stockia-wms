@@ -42,7 +42,6 @@ export async function getProductos(filtros: FiltrosProductos = {}) {
       stock_minimo,
       stock,
       activo,
-      imagen_url,
       created_at,
       updated_at,
       categoria:categoria_id (id, nombre),
