@@ -1,5 +1,6 @@
 import { getAlmacenesList } from '../../../lib/queries/operaciones'
 import { getHistorialComunicacionSedes } from '../../../lib/queries/sedes'
+import { getEpodDataParaAlmacenes } from '../../../lib/actions/epod'
 import { createClient } from '../../../lib/supabase/server'
 import { ComunicacionSedesManager } from '../../../components/maestros/ComunicacionSedesManager'
 
@@ -10,6 +11,8 @@ export default async function AlmacenesPage() {
     getAlmacenesList(),
     getHistorialComunicacionSedes(),
   ])
+
+  const epodMap = await getEpodDataParaAlmacenes(historial.map((h) => h.id))
 
   const supabase = await createClient()
   const {
@@ -58,6 +61,7 @@ export default async function AlmacenesPage() {
         productos={productos || []}
         userAlmacenId={userAlmacenId}
         userRol={userRol}
+        epodMap={epodMap}
       />
     </div>
   )

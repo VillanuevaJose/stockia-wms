@@ -25,6 +25,7 @@ import {
 } from '../../lib/actions/sedes'
 import type { SolicitudSedeRow } from '../../lib/queries/sedes'
 import type { AlmacenDetailRow } from '../../lib/queries/operaciones'
+import type { EpodFirmaGuardada } from '../../lib/actions/epod'
 
 interface Props {
   almacenes: AlmacenDetailRow[]
@@ -32,6 +33,7 @@ interface Props {
   productos: { id: string; nombre: string; sku: string }[]
   userAlmacenId?: string | null
   userRol?: 'admin' | 'almacenero' | 'vendedor'
+  epodMap?: Record<string, { token: string; firma: EpodFirmaGuardada | null }>
 }
 
 export function ComunicacionSedesManager({
@@ -40,6 +42,7 @@ export function ComunicacionSedesManager({
   productos,
   userAlmacenId,
   userRol = 'admin',
+  epodMap = {},
 }: Props) {
   const esAdminReal = userRol === 'admin'
   const userSedeAsignada = userAlmacenId ? almacenes.find((a) => a.id === userAlmacenId) : null
@@ -1024,13 +1027,59 @@ export function ComunicacionSedesManager({
                   <span className="text-[#6B7A72] text-[10px] block">DNI / Firma de Porte</span>
                 </div>
                 <div className="space-y-2">
-                  <div className="border-b border-dashed border-[#16201C] h-10" />
+                  {epodMap[guiaModalItem.id]?.firma ? (
+                    <div className="border-b border-dashed border-[#16201C] h-10 flex items-center justify-center">
+                      <svg viewBox="0 0 400 160" className="h-9 w-28">
+                        {epodMap[guiaModalItem.id]!.firma!.firma_svg_paths.map((d, i) => (
+                          <path
+                            key={i}
+                            d={d}
+                            fill="none"
+                            stroke="#16201C"
+                            strokeWidth={3}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        ))}
+                      </svg>
+                    </div>
+                  ) : (
+                    <div className="border-b border-dashed border-[#16201C] h-10" />
+                  )}
                   <span className="font-medium text-[#16201C] block">Recepción Conforme</span>
                   <span className="text-[#6B7A72] text-[10px] block">
-                    Sede {guiaModalItem.sede_origen.nombre}
+                    {epodMap[guiaModalItem.id]?.firma
+                      ? `Firmado por ${epodMap[guiaModalItem.id]!.firma!.receptor_nombre}`
+                      : `Sede ${guiaModalItem.sede_origen.nombre}`}
                   </span>
                 </div>
               </div>
+
+              {/* Acceso a Firma Digital e-POD en Móvil */}
+              {epodMap[guiaModalItem.id] && (
+                <div className="print:hidden p-3.5 rounded-[6px] bg-[#FAFAF7] border border-[#E7E5DF] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div>
+                    <span className="font-bold text-[#16201C] block">
+                      Confirmación Digital de Entrega (e-POD)
+                    </span>
+                    <span className="text-[11px] text-[#6B7A72]">
+                      {epodMap[guiaModalItem.id].firma
+                        ? 'Firma táctil registrada y verificada.'
+                        : 'Envía este enlace al chofer o receptor para firmar desde su celular.'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href={`/entrega/${guiaModalItem.id}?t=${epodMap[guiaModalItem.id].token}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-[6px] bg-[#16201C] text-[#FAFAF7] text-[11px] font-semibold hover:opacity-90"
+                    >
+                      {epodMap[guiaModalItem.id].firma ? 'Ver Constancia e-POD' : 'Abrir Firma Táctil'}
+                    </a>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
