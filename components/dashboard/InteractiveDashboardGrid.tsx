@@ -9,6 +9,7 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import {
   Check,
@@ -797,136 +798,140 @@ export function InteractiveDashboardGrid({
         </div>
       )}
 
-      {/* Overlay Flotante del Widget Levantado con Inclinación Física (-2.2deg) */}
-      {dragState && dragState.activated && (
-        <div
-          aria-hidden="true"
-          style={{
-            left: dragState.currentX - dragState.offsetX,
-            top: dragState.currentY - dragState.offsetY,
-            width: dragState.width,
-            height: dragState.height,
-            transform: 'rotate(-2.2deg) scale(1.015)',
-          }}
-          className="fixed z-50 pointer-events-none bg-white rounded-[8px] border-2 border-[#E8A33D] shadow-[0_20px_45px_-12px_rgba(22,32,28,0.28)] flex flex-col overflow-hidden transition-transform duration-75 motion-reduce:transform-none"
-        >
-          <div className="flex items-center justify-between px-3.5 py-2 bg-[#FAFAF7] border-b border-[#E7E5DF]">
-            <span className="text-[11px] font-semibold text-[#16201C] uppercase tracking-[0.04em]">
-              {WIDGET_CATALOG.find((c) => c.type === dragState.widget.type)?.title}
-            </span>
-            <span className="text-[10px] font-semibold text-[#C97D1A]">Soltar para intercambiar</span>
-          </div>
-          <div className="p-5 flex-1 opacity-95">
-            <DashboardWidgetRenderer type={dragState.widget.type} data={data} />
-          </div>
-        </div>
-      )}
-
-      {/* Drawer Lateral: Catálogo de Widgets */}
-      {isCatalogOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="catalogo-widgets-titulo"
-          className="fixed inset-0 z-50 flex justify-end bg-[#16201C]/35"
-        >
-          <div className="w-full max-w-md bg-white h-full border-l border-[#E7E5DF] flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-[#E7E5DF]">
-              <div>
-                <h2 id="catalogo-widgets-titulo" className="text-base font-bold text-[#16201C]">
-                  Catálogo de Widgets
-                </h2>
-                <p className="text-xs text-[#6B7A72]">
-                  Activa métricas, gráficos o listas operativas en tu panel
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCatalogOpen(false)}
-                aria-label="Cerrar catálogo de widgets"
-                className="p-1.5 text-[#6B7A72] hover:text-[#16201C] rounded-[6px] hover:bg-[#FAFAF7]"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="flex items-center gap-1.5 px-5 py-3 border-b border-[#E7E5DF] bg-[#FAFAF7]">
-              {(['Todos', 'KPIs', 'Gráficos', 'Operación'] as const).map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setCatalogFilter(cat)}
-                  className={`px-2.5 py-1 text-xs font-semibold rounded-[6px] transition-colors ${
-                    catalogFilter === cat
-                      ? 'bg-[#16201C] text-[#FAFAF7]'
-                      : 'text-[#6B7A72] hover:text-[#16201C]'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-5 space-y-3">
-              {filteredCatalog.map((entry) => {
-                const isAdded = activeTypes.has(entry.type)
-                const activeInstance = layout.find((w) => w.type === entry.type)
-
-                return (
-                  <div
-                    key={entry.type}
-                    className="p-4 rounded-[8px] border border-[#E7E5DF] bg-white flex items-start justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-[#16201C]">{entry.title}</span>
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[#6B7A72]">
-                          {entry.category}
-                        </span>
-                      </div>
-                      <p className="text-[12px] text-[#6B7A72] mt-1 leading-relaxed">
-                        {entry.description}
-                      </p>
-                    </div>
-
-                    {isAdded && activeInstance ? (
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveWidget(activeInstance.id)}
-                        className="shrink-0 px-2.5 py-1.5 text-xs font-semibold text-[#C93B3B] border border-[#E7E5DF] rounded-[6px] hover:bg-[#FAFAF7]"
-                      >
-                        Quitar
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleAddWidget(entry.type)}
-                        className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-[#16201C] text-[#FAFAF7] rounded-[6px] hover:opacity-90"
-                      >
-                        <Plus size={12} />
-                        Agregar
-                      </button>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="px-5 py-3.5 border-t border-[#E7E5DF] bg-[#FAFAF7] flex items-center justify-between">
-              <span className="text-xs text-[#6B7A72]">
-                {layout.length} de {WIDGET_CATALOG.length} activos
+      {/* Overlay Flotante del Widget Levantado con Inclinación Física (-2.2deg) montado en document.body */}
+      {dragState && dragState.activated && typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            aria-hidden="true"
+            style={{
+              left: dragState.currentX - dragState.offsetX,
+              top: dragState.currentY - dragState.offsetY,
+              width: dragState.width,
+              height: dragState.height,
+              transform: 'rotate(-2.2deg) scale(1.015)',
+            }}
+            className="fixed z-50 pointer-events-none bg-white rounded-[8px] border-2 border-[#E8A33D] shadow-[0_20px_45px_-12px_rgba(22,32,28,0.28)] flex flex-col overflow-hidden font-sans transition-transform duration-75 motion-reduce:transform-none"
+          >
+            <div className="flex items-center justify-between px-3.5 py-2 bg-[#FAFAF7] border-b border-[#E7E5DF]">
+              <span className="text-[11px] font-semibold text-[#16201C] uppercase tracking-[0.04em]">
+                {WIDGET_CATALOG.find((c) => c.type === dragState.widget.type)?.title}
               </span>
-              <button
-                type="button"
-                onClick={() => setIsCatalogOpen(false)}
-                className="px-4 py-1.5 text-xs font-semibold bg-[#16201C] text-[#FAFAF7] rounded-[6px]"
-              >
-                Listo
-              </button>
+              <span className="text-[10px] font-semibold text-[#C97D1A]">Soltar para intercambiar</span>
             </div>
-          </div>
-        </div>
-      )}
+            <div className="p-5 flex-1 opacity-95">
+              <DashboardWidgetRenderer type={dragState.widget.type} data={data} />
+            </div>
+          </div>,
+          document.body
+        )}
+
+      {/* Drawer Lateral: Catálogo de Widgets montado en document.body */}
+      {isCatalogOpen && typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="catalogo-widgets-titulo"
+            className="fixed inset-0 z-50 flex justify-end bg-[#16201C]/35 font-sans"
+          >
+            <div className="w-full max-w-md bg-white h-full border-l border-[#E7E5DF] flex flex-col">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[#E7E5DF]">
+                <div>
+                  <h2 id="catalogo-widgets-titulo" className="text-base font-bold text-[#16201C]">
+                    Catálogo de Widgets
+                  </h2>
+                  <p className="text-xs text-[#6B7A72]">
+                    Activa métricas, gráficos o listas operativas en tu panel
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCatalogOpen(false)}
+                  aria-label="Cerrar catálogo de widgets"
+                  className="p-1.5 text-[#6B7A72] hover:text-[#16201C] rounded-[6px] hover:bg-[#FAFAF7]"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1.5 px-5 py-3 border-b border-[#E7E5DF] bg-[#FAFAF7]">
+                {(['Todos', 'KPIs', 'Gráficos', 'Operación'] as const).map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCatalogFilter(cat)}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-[6px] transition-colors ${
+                      catalogFilter === cat
+                        ? 'bg-[#16201C] text-[#FAFAF7]'
+                        : 'text-[#6B7A72] hover:text-[#16201C]'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-5 space-y-3">
+                {filteredCatalog.map((entry) => {
+                  const isAdded = activeTypes.has(entry.type)
+                  const activeInstance = layout.find((w) => w.type === entry.type)
+
+                  return (
+                    <div
+                      key={entry.type}
+                      className="p-4 rounded-[8px] border border-[#E7E5DF] bg-white flex items-start justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-[#16201C]">{entry.title}</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-[0.05em] text-[#6B7A72]">
+                            {entry.category}
+                          </span>
+                        </div>
+                        <p className="text-[12px] text-[#6B7A72] mt-1 leading-relaxed">
+                          {entry.description}
+                        </p>
+                      </div>
+
+                      {isAdded && activeInstance ? (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveWidget(activeInstance.id)}
+                          className="shrink-0 px-2.5 py-1.5 text-xs font-semibold text-[#C93B3B] border border-[#E7E5DF] rounded-[6px] hover:bg-[#FAFAF7]"
+                        >
+                          Quitar
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleAddWidget(entry.type)}
+                          className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold bg-[#16201C] text-[#FAFAF7] rounded-[6px] hover:opacity-90"
+                        >
+                          <Plus size={12} />
+                          Agregar
+                        </button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="px-5 py-3.5 border-t border-[#E7E5DF] bg-[#FAFAF7] flex items-center justify-between">
+                <span className="text-xs text-[#6B7A72]">
+                  {layout.length} de {WIDGET_CATALOG.length} activos
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsCatalogOpen(false)}
+                  className="px-4 py-1.5 text-xs font-semibold bg-[#16201C] text-[#FAFAF7] rounded-[6px]"
+                >
+                  Listo
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   )
 }
