@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { getInventarioFisico, getSesionesConteoCiego } from '../../../lib/queries/operaciones'
+import { getLotesFefoAction } from '../../../lib/actions/lotes'
 import { createClient } from '../../../lib/supabase/server'
 import { Boxes, Plus } from '../../../components/ui/icons'
 import {
@@ -7,10 +8,19 @@ import {
   type ProductoConteoCiego,
 } from '../../../components/inventario/ConteoFisicoDrawer'
 import { RevisionConteosCiegos } from '../../../components/inventario/RevisionConteosCiegos'
+import { LotesFefoManager } from '../../../components/inventario/LotesFefoManager'
 
 export const dynamic = 'force-dynamic'
 
-export default async function InventarioPage() {
+interface InventarioPageProps {
+  searchParams: Promise<{
+    tab?: string
+  }>
+}
+
+export default async function InventarioPage({ searchParams }: InventarioPageProps) {
+  const params = await searchParams
+  const tab = params.tab === 'lotes' ? 'lotes' : 'existencias'
   const supabase = await createClient()
   const {
     data: { user },
@@ -29,14 +39,15 @@ export default async function InventarioPage() {
     }
   }
 
-  const [{ inventario, totales }, { data: almacenes }, sesionesConteo] = await Promise.all([
+  const [{ inventario, totales }, { data: almacenes }, sesionesConteo, lotesFefo] = await Promise.all([
     getInventarioFisico(),
     supabase
       .from('almacen')
       .select('id, nombre, es_principal')
       .eq('activo', true)
       .order('es_principal', { ascending: false }),
-    userRole === 'admin' ? getSesionesConteoCiego() : Promise.resolve([]),
+    userRole === 'admin' && tab === 'existencias' ? getSesionesConteoCiego() : Promise.resolve([]),
+    tab === 'lotes' ? getLotesFefoAction() : Promise.resolve([]),
   ])
 
   // Proyección ciega: el componente de conteo en piso NO recibe saldos ni costos del sistema
@@ -77,6 +88,28 @@ export default async function InventarioPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 bg-[#FAFAF7] p-1 rounded-[8px] border border-[#E7E5DF]">
+              <Link
+                href="/admin/inventario"
+                className={`px-3 py-1 text-[12px] font-medium rounded-[6px] transition-colors ${
+                  tab === 'existencias'
+                    ? 'bg-[#16201C] text-white'
+                    : 'text-[#6B7A72] hover:text-[#16201C]'
+                }`}
+              >
+                Existencias
+              </Link>
+              <Link
+                href="/admin/inventario?tab=lotes"
+                className={`px-3 py-1 text-[12px] font-medium rounded-[6px] transition-colors ${
+                  tab === 'lotes'
+                    ? 'bg-[#16201C] text-white'
+                    : 'text-[#6B7A72] hover:text-[#16201C]'
+                }`}
+              >
+                Lotes y FEFO
+              </Link>
+            </div>
             <ConteoFisicoDrawer
               productos={productosParaConteo}
               almacenes={almacenes || []}
@@ -100,10 +133,22 @@ export default async function InventarioPage() {
         </div>
       </div>
 
-      {/* Cola de Revisión y Aprobación de Conteos Ciegos (Solo Admin) */}
-      {userRole === 'admin' && sesionesConteo.length > 0 && (
-        <RevisionConteosCiegos sesiones={sesionesConteo} />
-      )}
+      {tab === 'lotes' ? (
+        <LotesFefoManager
+          lotes={lotesFefo}
+          productos={inventario.map((i) => ({
+            id: i.producto_id,
+            sku: i.sku,
+            nombre: i.producto_nombre,
+          }))}
+          almacenes={(almacenes || []).map((a) => ({ id: a.id, nombre: a.nombre }))}
+        />
+      ) : (
+        <>
+          {/* Cola de Revisión y Aprobación de Conteos Ciegos (Solo Admin) */}
+          {userRole === 'admin' && sesionesConteo.length > 0 && (
+            <RevisionConteosCiegos sesiones={sesionesConteo} />
+          )}
 
       {/* 3 Cifras Grandes Tipográficas sin Caja */}
       <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#E7E5DF] py-2 border-b border-[#E7E5DF]">
@@ -217,6 +262,8 @@ export default async function InventarioPage() {
           </table>
         </div>
       </div>
+        </>
+      )}
     </div>
   )
 }
