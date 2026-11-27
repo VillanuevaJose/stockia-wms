@@ -9,8 +9,10 @@ export interface InventarioFisicoRow {
   id: string
   producto_id: string
   sku: string
+  codigo_barras: string | null
   producto_nombre: string
   categoria: string
+  almacen_id: string | null
   almacen_nombre: string
   stock_actual: number
   stock_minimo: number
@@ -30,22 +32,24 @@ export async function getInventarioFisico(): Promise<{
     .from('inventario')
     .select(`
       id,
+      almacen_id,
       producto_id,
       stock_actual,
-      almacen:almacen_id (nombre),
-      producto:producto_id (id, sku, nombre, costo, precio_soles, stock_minimo, activo, categoria:categoria_id (nombre))
+      almacen:almacen_id (id, nombre),
+      producto:producto_id (id, sku, codigo_barras, nombre, costo, precio_soles, stock_minimo, activo, categoria:categoria_id (nombre))
     `)
 
   if (error || !invData || invData.length === 0) {
     // Si la tabla inventario aún no tiene filas, consultamos productos
     const { data: prods } = await supabase
       .from('productos')
-      .select('id, sku, nombre, costo, precio_soles, stock, stock_minimo, categoria:categoria_id (nombre)')
+      .select('id, sku, codigo_barras, nombre, costo, precio_soles, stock, stock_minimo, categoria:categoria_id (nombre)')
       .eq('activo', true)
 
     interface RawProdFallback {
       id: string
       sku?: string
+      codigo_barras?: string | null
       nombre: string
       costo?: number
       precio_soles?: number
@@ -65,8 +69,10 @@ export async function getInventarioFisico(): Promise<{
         id: `inv-${p.id || idx}`,
         producto_id: p.id,
         sku: p.sku || '',
+        codigo_barras: p.codigo_barras || null,
         producto_nombre: p.nombre,
         categoria: Array.isArray(p.categoria) ? p.categoria[0]?.nombre || 'General' : p.categoria?.nombre || 'General',
+        almacen_id: null,
         almacen_nombre: 'Almacén Principal',
         stock_actual: stock,
         stock_minimo: stockMin,
@@ -91,24 +97,29 @@ export async function getInventarioFisico(): Promise<{
 
   interface RawInventarioQueryRow {
     id: string
+    almacen_id?: string | null
     producto_id: string
     stock_actual?: number
     producto?: {
       sku?: string
+      codigo_barras?: string | null
       nombre?: string
       stock_minimo?: number
       costo?: number
+      precio_soles?: number
       activo?: boolean
       categoria?: { nombre?: string } | { nombre?: string }[]
     } | {
       sku?: string
+      codigo_barras?: string | null
       nombre?: string
       stock_minimo?: number
       costo?: number
+      precio_soles?: number
       activo?: boolean
       categoria?: { nombre?: string } | { nombre?: string }[]
     }[]
-    almacen?: { nombre?: string } | { nombre?: string }[]
+    almacen?: { id?: string; nombre?: string } | { id?: string; nombre?: string }[]
   }
 
   // Filtrar registros cuyo producto está desactivado
@@ -124,7 +135,7 @@ export async function getInventarioFisico(): Promise<{
 
     const stock = Number(row.stock_actual) || 0
     const stockMin = Number(prod.stock_minimo) || 5
-    const costo = Number(prod.costo) || 10
+    const costo = Number(prod.costo) > 0 ? Number(prod.costo) : Number(prod.precio_soles) || 0
     const estado: InventarioFisicoRow['estado'] =
       stock <= 0 ? 'CRITICO' : stock <= stockMin ? 'BAJO' : 'OPTIMO'
 
@@ -132,8 +143,10 @@ export async function getInventarioFisico(): Promise<{
       id: row.id,
       producto_id: row.producto_id,
       sku: prod.sku || 'S/N',
+      codigo_barras: prod.codigo_barras || null,
       producto_nombre: prod.nombre || 'Producto',
       categoria: cat,
+      almacen_id: row.almacen_id || alm.id || null,
       almacen_nombre: alm.nombre || 'Almacén Central',
       stock_actual: stock,
       stock_minimo: stockMin,
@@ -510,5 +523,89 @@ export async function getAuditoriaList(): Promise<AuditoriaRow[]> {
       usuario_nombre: a.usuario_id ? (nombreMap[a.usuario_id] ?? 'Sistema') : 'Sistema',
       created_at: a.created_at,
     }))
+  })
+}
+
+// ==========================================
+// 8. SESIONES DE CONTEO CIEGO (BLIND CYCLE COUNTING)
+// ==========================================
+export interface ConteoCiegoDetalleItem {
+  producto_id: string
+  sku: string
+  producto_nombre: string
+  almacen_id: string | null
+  stock_sistema: number
+  cantidad_contada: number
+  diferencia: number
+  costo_unitario: number
+  impacto_soles: number
+}
+
+export interface SesionConteoCiego {
+  sesion_id: string
+  estado: 'PENDIENTE' | 'APROBADO' | 'RECHAZADO'
+  motivo: string
+  almacen_id: string | null
+  almacen_nombre: string
+  operario_nombre: string
+  revisor_nombre?: string
+  fecha_envio: string
+  fecha_resolucion?: string
+  total_contados: number
+  total_con_diferencia: number
+  faltante_soles: number
+  sobrante_soles: number
+  detalles: ConteoCiegoDetalleItem[]
+}
+
+export async function getSesionesConteoCiego(): Promise<SesionConteoCiego[]> {
+  return withFastCache('sesiones-conteo-ciego', 15, async () => {
+    const supabase = await createClient()
+
+    const { data: eventos } = await supabase
+      .from('auditoria')
+      .select('id, registro_id, accion, datos_nuevos, created_at')
+      .eq('tabla', 'conteo_ciego')
+      .order('created_at', { ascending: false })
+      .limit(60)
+
+    if (!eventos || eventos.length === 0) return []
+
+    const sesionesMap = new Map<string, SesionConteoCiego>()
+
+    for (const ev of eventos) {
+      const payload = ev.datos_nuevos as Partial<SesionConteoCiego> | null
+      const sesionId = ev.registro_id || payload?.sesion_id
+      if (!sesionId || !payload) continue
+
+      // Como los eventos están ordenados DESC, el primero por registro_id refleja el estado más reciente
+      if (!sesionesMap.has(sesionId)) {
+        const estado: SesionConteoCiego['estado'] =
+          ev.accion === 'CONTEO_CIEGO_APROBADO'
+            ? 'APROBADO'
+            : ev.accion === 'CONTEO_CIEGO_RECHAZADO'
+              ? 'RECHAZADO'
+              : 'PENDIENTE'
+
+        sesionesMap.set(sesionId, {
+          sesion_id: sesionId,
+          estado,
+          motivo: payload.motivo || 'Auditoría física ciega',
+          almacen_id: payload.almacen_id || null,
+          almacen_nombre: payload.almacen_nombre || 'Almacén Principal',
+          operario_nombre: payload.operario_nombre || 'Operario',
+          revisor_nombre: payload.revisor_nombre,
+          fecha_envio: payload.fecha_envio || ev.created_at,
+          fecha_resolucion: estado !== 'PENDIENTE' ? ev.created_at : undefined,
+          total_contados: Number(payload.total_contados) || 0,
+          total_con_diferencia: Number(payload.total_con_diferencia) || 0,
+          faltante_soles: Number(payload.faltante_soles) || 0,
+          sobrante_soles: Number(payload.sobrante_soles) || 0,
+          detalles: Array.isArray(payload.detalles) ? payload.detalles : [],
+        })
+      }
+    }
+
+    return Array.from(sesionesMap.values())
   })
 }
