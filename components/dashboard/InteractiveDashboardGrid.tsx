@@ -171,7 +171,7 @@ export function InteractiveDashboardGrid({
   const layout = useMemo<WidgetConfigItem[]>(() => {
     try {
       const parsed = JSON.parse(layoutSerialized)
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed.filter(
           (item): item is WidgetConfigItem =>
             typeof item?.id === 'string' &&
@@ -209,6 +209,7 @@ export function InteractiveDashboardGrid({
   const gridContainerRef = useRef<HTMLDivElement | null>(null)
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map())
   const prevRectsRef = useRef<Map<string, DOMRect>>(new Map())
+  const justAddedIdRef = useRef<string | null>(null)
 
   const setCardRef = useCallback((id: string, el: HTMLElement | null) => {
     if (el) {
@@ -226,10 +227,11 @@ export function InteractiveDashboardGrid({
     prevRectsRef.current = rects
   }, [])
 
-  // Motor FLIP (First, Last, Invert, Play) para deslizar widgets suavemente en cualquier cambio de grid
+  // Motor FLIP (First, Last, Invert, Play) + animación de aparición para nuevos widgets
   useLayoutEffect(() => {
     const prevRects = prevRectsRef.current
-    if (prevRects.size === 0) return
+    const addedId = justAddedIdRef.current
+    if (prevRects.size === 0 && !addedId) return
 
     const prefersReduced =
       typeof window !== 'undefined' &&
@@ -237,11 +239,13 @@ export function InteractiveDashboardGrid({
 
     if (prefersReduced) {
       prevRects.clear()
+      justAddedIdRef.current = null
       return
     }
 
-    const animatedElements: HTMLElement[] = []
+    const slidingElements: HTMLElement[] = []
     cardRefs.current.forEach((el, id) => {
+      if (id === addedId) return
       const prev = prevRects.get(id)
       if (!prev) return
       const next = el.getBoundingClientRect()
@@ -252,17 +256,25 @@ export function InteractiveDashboardGrid({
 
       el.style.transition = 'none'
       el.style.transform = `translate3d(${dx}px, ${dy}px, 0)`
-      animatedElements.push(el)
+      slidingElements.push(el)
     })
 
+    const addedEl = addedId ? cardRefs.current.get(addedId) : undefined
+    if (addedEl) {
+      addedEl.style.transition = 'none'
+      addedEl.style.opacity = '0'
+      addedEl.style.transform = 'scale(0.92) translateY(-10px)'
+    }
+
     prevRects.clear()
-    if (animatedElements.length === 0) return
+    justAddedIdRef.current = null
+    if (slidingElements.length === 0 && !addedEl) return
 
     // Forzar reflow una sola vez para aplicar el estado inicial invertido antes de animar
     void document.body.offsetHeight
 
     requestAnimationFrame(() => {
-      animatedElements.forEach((el) => {
+      slidingElements.forEach((el) => {
         el.style.transition = 'transform 260ms cubic-bezier(0.23, 1, 0.32, 1)'
         el.style.transform = ''
         el.addEventListener(
@@ -273,6 +285,21 @@ export function InteractiveDashboardGrid({
           { once: true }
         )
       })
+
+      if (addedEl) {
+        addedEl.style.transition =
+          'transform 280ms cubic-bezier(0.23, 1, 0.32, 1), opacity 220ms ease-out'
+        addedEl.style.opacity = '1'
+        addedEl.style.transform = ''
+        addedEl.addEventListener(
+          'transitionend',
+          () => {
+            addedEl.style.transition = ''
+            addedEl.style.opacity = ''
+          },
+          { once: true }
+        )
+      }
     })
   }, [layout])
 
@@ -312,13 +339,15 @@ export function InteractiveDashboardGrid({
   const handleAddWidget = (type: WidgetType) => {
     const meta = WIDGET_CATALOG.find((c) => c.type === type)
     if (!meta || activeTypes.has(type)) return
+    const newId = `w-${type}`
+    justAddedIdRef.current = newId
     const next: WidgetConfigItem[] = [
-      ...layout,
       {
-        id: `w-${type}`,
+        id: newId,
         type,
         colSpan: meta.defaultSpan,
       },
+      ...layout,
     ]
     commitLayout(next)
   }
