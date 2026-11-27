@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createClient } from '../supabase/server'
+import { invalidateFastCache } from '../cache/fast-cache'
 
 const crearSolicitudSchema = z.object({
   sede_origen_id: z.string().uuid('Selecciona la sede emisora válida'),
@@ -66,7 +67,9 @@ export async function crearSolicitudSedesAction(
     return { success: false, error: 'Error al enviar la comunicación entre sedes: ' + error.message }
   }
 
+  invalidateFastCache('reabastecimiento-rop')
   revalidatePath('/admin/almacenes')
+  revalidatePath('/admin/compras')
   return { success: true, solicitud_id: newRow.id }
 }
 
@@ -186,10 +189,15 @@ export async function responderSolicitudSedesAction(
     return { success: false, error: 'No se pudo actualizar el estado: ' + error.message }
   }
 
+  invalidateFastCache('reabastecimiento-rop')
+  invalidateFastCache('inventario-fisico')
+  invalidateFastCache('dashboard-data')
   revalidatePath('/admin/almacenes')
+  revalidatePath('/admin/compras')
   revalidatePath('/admin/inventario')
   revalidatePath('/admin/movimientos')
   revalidatePath('/admin/productos')
+  revalidatePath('/admin')
   return { success: true }
 }
 

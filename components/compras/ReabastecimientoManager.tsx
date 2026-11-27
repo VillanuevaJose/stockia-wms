@@ -1,11 +1,13 @@
 'use client'
 
 import { useMemo, useState, useTransition } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Check, Search, ShoppingCart, Truck, X } from '../ui/icons'
+import { AlertTriangle, ArrowRight, Check, Search, ShoppingCart, Truck, X } from '../ui/icons'
 import type { ReabastecimientoReporte, SugerenciaReabastecimientoRow } from '@/lib/queries/reabastecimiento'
 import { calcularProyeccionRopRunway } from '@/lib/utils/runway'
 import { generarCompraRapidaRopAction } from '@/lib/actions/compras'
+import { crearSolicitudSedesAction } from '@/lib/actions/sedes'
 
 interface ReabastecimientoManagerProps {
   reporte: ReabastecimientoReporte
@@ -25,13 +27,19 @@ function formatShortDate(iso: string): string {
 export function ReabastecimientoManager({ reporte, almacenes }: ReabastecimientoManagerProps) {
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
-  const [filterEstado, setFilterEstado] = useState<'ALERTAS' | 'TODOS' | 'CRITICO' | 'REORDEN' | 'OPTIMO'>('ALERTAS')
+  const [filterEstado, setFilterEstado] = useState<'ALERTAS' | 'BALANCEO' | 'TODOS' | 'CRITICO' | 'REORDEN' | 'OPTIMO'>('ALERTAS')
   const [selectedAlmacen, setSelectedAlmacen] = useState<string>(almacenes[0]?.id || '')
   const [leadTimeDias, setLeadTimeDias] = useState<number>(5)
   const [isPending, startTransition] = useTransition()
   const [confirmandoId, setConfirmandoId] = useState<string | null>(null)
+  const [confirmandoTrasladoId, setConfirmandoTrasladoId] = useState<string | null>(null)
   const [comprandoId, setComprandoId] = useState<string | null>(null)
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [feedback, setFeedback] = useState<{
+    type: 'success' | 'error'
+    message: string
+    linkHref?: string
+    linkLabel?: string
+  } | null>(null)
 
   // Recalcular proyecciones en vivo cuando el usuario cambia el Lead Time
   const { articulosCalculados, kpis } = useMemo(() => {
@@ -100,6 +108,8 @@ export function ReabastecimientoManager({ reporte, almacenes }: Reabastecimiento
         articulos_optimos: optimos,
         articulos_runway_bajo: runwayBajo,
         presupuesto_total_sugerido: Math.round(presupuesto * 100) / 100,
+        oportunidades_balanceo: reporte.kpis.oportunidades_balanceo,
+        ahorro_potencial_balanceo: reporte.kpis.ahorro_potencial_balanceo,
       },
     }
   }, [reporte, leadTimeDias])
@@ -115,7 +125,9 @@ export function ReabastecimientoManager({ reporte, almacenes }: Reabastecimiento
 
       let matchesEstado = true
       if (filterEstado === 'ALERTAS') {
-        matchesEstado = item.estado === 'CRITICO' || item.estado === 'REORDEN'
+        matchesEstado = item.estado === 'CRITICO' || item.estado === 'REORDEN' || Boolean(item.sugerencia_balanceo)
+      } else if (filterEstado === 'BALANCEO') {
+        matchesEstado = Boolean(item.sugerencia_balanceo)
       } else if (filterEstado !== 'TODOS') {
         matchesEstado = item.estado === filterEstado
       }
@@ -123,6 +135,42 @@ export function ReabastecimientoManager({ reporte, almacenes }: Reabastecimiento
       return matchesSearch && matchesEstado
     })
   }, [articulosCalculados, searchTerm, filterEstado])
+
+  const ejecutarTrasladoUnClic = (art: SugerenciaReabastecimientoRow) => {
+    const bal = art.sugerencia_balanceo
+    if (!bal) return
+
+    setConfirmandoTrasladoId(null)
+    setComprandoId(art.producto_id)
+    setFeedback(null)
+
+    startTransition(async () => {
+      const res = await crearSolicitudSedesAction({
+        sede_origen_id: bal.sede_receptora_id,
+        sede_destino_id: bal.sede_emisora_id,
+        producto_id: art.producto_id,
+        cantidad: bal.cantidad_transferible,
+        prioridad: art.estado === 'CRITICO' ? 'URGENTE' : 'ALTA',
+        mensaje: `Balanceo inteligente Runway/ROP: transferir ${bal.cantidad_transferible} und de ${bal.sede_emisora_nombre} a ${bal.sede_receptora_nombre} (ahorro est. S/ ${bal.ahorro_estimado_soles.toFixed(2)}).`,
+      })
+
+      if (res.success) {
+        setFeedback({
+          type: 'success',
+          message: `Traslado inter-sedes solicitado: +${bal.cantidad_transferible} und de "${art.nombre}" desde ${bal.sede_emisora_nombre} hacia ${bal.sede_receptora_nombre}.`,
+          linkHref: '/admin/almacenes',
+          linkLabel: 'Despachar en Sedes',
+        })
+        router.refresh()
+      } else {
+        setFeedback({
+          type: 'error',
+          message: res.error || 'No se pudo generar la solicitud de traslado entre sedes.',
+        })
+      }
+      setComprandoId(null)
+    })
+  }
 
   const ejecutarCompraUnClic = (art: SugerenciaReabastecimientoRow) => {
     if (art.cantidad_sugerida <= 0) return
@@ -168,13 +216,21 @@ export function ReabastecimientoManager({ reporte, almacenes }: Reabastecimiento
               : 'bg-[#FAFAF7] border-[#C93B3B] text-[#C93B3B]'
           }`}
         >
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {feedback.type === 'success' ? (
               <Check size={16} className="text-[#2A7A4C] shrink-0" />
             ) : (
               <AlertTriangle size={16} className="text-[#C93B3B] shrink-0" />
             )}
             <span className="font-medium">{feedback.message}</span>
+            {feedback.linkHref && feedback.linkLabel && (
+              <Link
+                href={feedback.linkHref}
+                className="inline-flex items-center gap-1 font-semibold text-[#16201C] underline underline-offset-2 ml-1"
+              >
+                {feedback.linkLabel} <ArrowRight size={12} />
+              </Link>
+            )}
           </div>
           <button
             type="button"
@@ -276,6 +332,38 @@ export function ReabastecimientoManager({ reporte, almacenes }: Reabastecimiento
         </div>
       </div>
 
+      {/* Aviso de Balanceo Inteligente Inter-Sedes */}
+      {kpis.oportunidades_balanceo > 0 && (
+        <div className="bg-white border border-[#E8A33D] rounded-[8px] px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-[#E8A33D]" aria-hidden="true" />
+              <span className="text-xs font-bold text-[#16201C]">
+                Balanceo Inteligente Inter-Sedes: {kpis.oportunidades_balanceo}{' '}
+                {kpis.oportunidades_balanceo === 1 ? 'artículo puede' : 'artículos pueden'} cubrirse transfiriendo excedentes
+              </span>
+            </div>
+            <p className="text-[12px] text-[#6B7A72] tabular-nums">
+              Ahorro estimado al transferir entre sedes antes de comprar a proveedor:{' '}
+              <strong className="text-[#2A7A4C]">
+                S/ {kpis.ahorro_potencial_balanceo.toLocaleString('es-PE', { minimumFractionDigits: 2 })}
+              </strong>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFilterEstado(filterEstado === 'BALANCEO' ? 'ALERTAS' : 'BALANCEO')}
+            className={`px-3 py-1.5 text-xs font-semibold rounded-[6px] shrink-0 transition-colors ${
+              filterEstado === 'BALANCEO'
+                ? 'bg-[#16201C] text-[#FAFAF7]'
+                : 'bg-[#FAFAF7] border border-[#E7E5DF] text-[#16201C] hover:bg-[#F4F3EF]'
+            }`}
+          >
+            {filterEstado === 'BALANCEO' ? 'Ver todas las alertas' : 'Filtrar por Balanceo'}
+          </button>
+        </div>
+      )}
+
       {/* Barra de Filtros */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-[8px] border border-[#E7E5DF]">
         <div className="relative flex-1">
@@ -306,7 +394,7 @@ export function ReabastecimientoManager({ reporte, almacenes }: Reabastecimiento
           )}
 
           <div className="flex items-center gap-1 overflow-x-auto">
-            {(['ALERTAS', 'TODOS', 'CRITICO', 'REORDEN', 'OPTIMO'] as const).map((fil) => (
+            {(['ALERTAS', 'BALANCEO', 'TODOS', 'CRITICO', 'REORDEN', 'OPTIMO'] as const).map((fil) => (
               <button
                 key={fil}
                 type="button"
@@ -317,7 +405,11 @@ export function ReabastecimientoManager({ reporte, almacenes }: Reabastecimiento
                     : 'bg-[#FAFAF7] hover:bg-[#E7E5DF] text-[#6B7A72]'
                 }`}
               >
-                {fil === 'ALERTAS' ? 'Solo Alertas' : fil.charAt(0) + fil.slice(1).toLowerCase()}
+                {fil === 'ALERTAS'
+                  ? 'Solo Alertas'
+                  : fil === 'BALANCEO'
+                    ? `Balanceo (${kpis.oportunidades_balanceo})`
+                    : fil.charAt(0) + fil.slice(1).toLowerCase()}
               </button>
             ))}
           </div>
@@ -449,7 +541,26 @@ export function ReabastecimientoManager({ reporte, almacenes }: Reabastecimiento
                       </td>
 
                       <td className="py-2.5 px-3 text-right tabular-nums">
-                        {art.cantidad_sugerida > 0 ? (
+                        {art.sugerencia_balanceo ? (
+                          <div className="space-y-0.5">
+                            <div className="font-bold text-[#2A7A4C]">
+                              Transferir +{art.sugerencia_balanceo.cantidad_transferible} und
+                            </div>
+                            <div className="text-[11px] text-[#16201C]">
+                              {art.sugerencia_balanceo.sede_emisora_nombre} → {art.sugerencia_balanceo.sede_receptora_nombre}
+                            </div>
+                            <div className="text-[10px] text-[#6B7A72]">
+                              Ahorro est.: S/ {art.sugerencia_balanceo.ahorro_estimado_soles.toFixed(2)}
+                            </div>
+                          </div>
+                        ) : art.traslado_en_curso ? (
+                          <Link
+                            href="/admin/almacenes"
+                            className="text-[11px] font-semibold text-[#C97D1A] hover:underline"
+                          >
+                            Traslado en curso
+                          </Link>
+                        ) : art.cantidad_sugerida > 0 ? (
                           <div>
                             <div className="font-bold text-[#16201C]">
                               +{art.cantidad_sugerida} und · S/ {art.inversion_estimada.toFixed(2)}
@@ -467,7 +578,48 @@ export function ReabastecimientoManager({ reporte, almacenes }: Reabastecimiento
                       </td>
 
                       <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
-                        {art.estado !== 'OPTIMO' ? (
+                        {art.sugerencia_balanceo ? (
+                          confirmandoTrasladoId === art.producto_id ? (
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => ejecutarTrasladoUnClic(art)}
+                                disabled={estaComprando}
+                                className="px-2.5 py-1 text-[11px] font-semibold bg-[#2A7A4C] text-white rounded-[6px] hover:opacity-90 disabled:opacity-50"
+                              >
+                                {estaComprando ? 'Enviando...' : 'Confirmar Traslado'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmandoTrasladoId(null)}
+                                aria-label="Cancelar traslado"
+                                className="p-1 text-[#6B7A72] hover:text-[#16201C] border border-[#E7E5DF] rounded-[6px]"
+                              >
+                                <X size={13} />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setConfirmandoId(null)
+                                setConfirmandoTrasladoId(art.producto_id)
+                              }}
+                              disabled={estaComprando}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold bg-[#16201C] hover:opacity-90 text-[#FAFAF7] rounded-[6px] transition-opacity cursor-pointer disabled:opacity-50"
+                            >
+                              <Truck size={13} />
+                              <span>Transferir 1 Clic</span>
+                            </button>
+                          )
+                        ) : art.traslado_en_curso ? (
+                          <Link
+                            href="/admin/almacenes"
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#16201C] hover:underline"
+                          >
+                            Ver envío <ArrowRight size={11} />
+                          </Link>
+                        ) : art.estado !== 'OPTIMO' ? (
                           estaConfirmando ? (
                             <div className="inline-flex items-center gap-1">
                               <button
@@ -490,7 +642,10 @@ export function ReabastecimientoManager({ reporte, almacenes }: Reabastecimiento
                           ) : (
                             <button
                               type="button"
-                              onClick={() => setConfirmandoId(art.producto_id)}
+                              onClick={() => {
+                                setConfirmandoTrasladoId(null)
+                                setConfirmandoId(art.producto_id)
+                              }}
                               disabled={estaComprando}
                               className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold bg-[#16201C] hover:opacity-90 text-[#FAFAF7] rounded-[6px] transition-opacity cursor-pointer disabled:opacity-50"
                             >

@@ -2,6 +2,17 @@ import { createClient } from '../supabase/server'
 import { withFastCache } from '../cache/fast-cache'
 import { calcularProyeccionRopRunway } from '../utils/runway'
 
+export interface SugerenciaBalanceoSedes {
+  sede_emisora_id: string
+  sede_emisora_nombre: string
+  stock_emisora: number
+  sede_receptora_id: string
+  sede_receptora_nombre: string
+  stock_receptora: number
+  cantidad_transferible: number
+  ahorro_estimado_soles: number
+}
+
 export interface SugerenciaReabastecimientoRow {
   producto_id: string
   sku: string
@@ -23,6 +34,8 @@ export interface SugerenciaReabastecimientoRow {
   inversion_estimada: number
   proveedor_sugerido_id: string | null
   proveedor_sugerido_nombre: string
+  sugerencia_balanceo: SugerenciaBalanceoSedes | null
+  traslado_en_curso: boolean
 }
 
 export interface ReabastecimientoReporte {
@@ -34,6 +47,8 @@ export interface ReabastecimientoReporte {
     articulos_optimos: number
     articulos_runway_bajo: number
     presupuesto_total_sugerido: number
+    oportunidades_balanceo: number
+    ahorro_potencial_balanceo: number
   }
 }
 
@@ -76,13 +91,23 @@ export async function getSugerenciasReabastecimiento(): Promise<Reabastecimiento
       provQuery = provQuery.eq('negocio_id', negocio_id)
     }
 
+    let almacenesQuery = supabase
+      .from('almacen')
+      .select('id, nombre, es_principal')
+      .eq('activo', true)
+      .order('es_principal', { ascending: false })
+
+    if (negocio_id) {
+      almacenesQuery = almacenesQuery.eq('negocio_id', negocio_id)
+    }
+
     const ahoraMs = Date.now()
     const hace10DiasMs = ahoraMs - 10 * 24 * 60 * 60 * 1000
     const hace30DiasIso = new Date(ahoraMs - 30 * 24 * 60 * 60 * 1000).toISOString()
 
     let ventasQuery = supabase
       .from('venta')
-      .select('fecha_emision, detalle_venta(producto_id, cantidad)')
+      .select('almacen_origen_id, fecha_emision, detalle_venta(producto_id, cantidad)')
       .gte('fecha_emision', hace30DiasIso)
       .neq('estado', 'ANULADA')
 
@@ -101,12 +126,30 @@ export async function getSugerenciasReabastecimiento(): Promise<Reabastecimiento
       comprasRecientesQuery = comprasRecientesQuery.eq('negocio_id', negocio_id)
     }
 
+    let trasladosActivosQuery = supabase
+      .from('solicitud_traslado')
+      .select('producto_id')
+      .in('estado', ['PENDIENTE', 'EN_TRANSITO'])
+
+    if (negocio_id) {
+      trasladosActivosQuery = trasladosActivosQuery.eq('negocio_id', negocio_id)
+    }
+
     const [
       { data: productos },
       { data: proveedores },
+      { data: almacenes },
       { data: ventas30d },
       { data: comprasRecientes },
-    ] = await Promise.all([prodQuery, provQuery, ventasQuery, comprasRecientesQuery])
+      { data: trasladosActivos },
+    ] = await Promise.all([
+      prodQuery,
+      provQuery,
+      almacenesQuery,
+      ventasQuery,
+      comprasRecientesQuery,
+      trasladosActivosQuery,
+    ])
 
     if (!productos || productos.length === 0) {
       return {
@@ -118,13 +161,36 @@ export async function getSugerenciasReabastecimiento(): Promise<Reabastecimiento
           articulos_optimos: 0,
           articulos_runway_bajo: 0,
           presupuesto_total_sugerido: 0,
+          oportunidades_balanceo: 0,
+          ahorro_potencial_balanceo: 0,
         },
+      }
+    }
+
+    const almacenesList = almacenes || []
+    const trasladosEnCursoSet = new Set(
+      (trasladosActivos || []).map((t) => t.producto_id).filter(Boolean) as string[]
+    )
+
+    // Si existen 2+ sedes, consultar inventario por sede para balanceo inteligente
+    const mapaStockPorSede: Record<string, Record<string, number>> = {}
+    if (almacenesList.length >= 2) {
+      const almacenIds = almacenesList.map((a) => a.id)
+      const { data: invRows } = await supabase
+        .from('inventario')
+        .select('producto_id, almacen_id, stock_actual')
+        .in('almacen_id', almacenIds)
+
+      for (const row of invRows || []) {
+        if (!mapaStockPorSede[row.producto_id]) {
+          mapaStockPorSede[row.producto_id] = {}
+        }
+        mapaStockPorSede[row.producto_id][row.almacen_id] = Number(row.stock_actual) || 0
       }
     }
 
     const primerProv = proveedores && proveedores.length > 0 ? proveedores[0] : null
 
-    // Mapear el proveedor real más reciente por producto según historial de compras
     const mapaProveedorProducto: Record<string, { id: string; nombre: string }> = {}
     if (comprasRecientes) {
       for (const comp of comprasRecientes) {
@@ -147,9 +213,9 @@ export async function getSugerenciasReabastecimiento(): Promise<Reabastecimiento
       }
     }
 
-    // Agregar ventas en ventanas [0..10d] y [11..30d] excluyendo ventas anuladas
     const mapaVentas10d: Record<string, number> = {}
     const mapaVentas20dPrev: Record<string, number> = {}
+    const mapaVentasPorSede: Record<string, Record<string, number>> = {}
 
     if (ventas30d) {
       for (const v of ventas30d) {
@@ -167,6 +233,14 @@ export async function getSugerenciasReabastecimiento(): Promise<Reabastecimiento
           } else {
             mapaVentas20dPrev[det.producto_id] = (mapaVentas20dPrev[det.producto_id] || 0) + cant
           }
+
+          if (v.almacen_origen_id) {
+            if (!mapaVentasPorSede[det.producto_id]) {
+              mapaVentasPorSede[det.producto_id] = {}
+            }
+            mapaVentasPorSede[det.producto_id][v.almacen_origen_id] =
+              (mapaVentasPorSede[det.producto_id][v.almacen_origen_id] || 0) + cant
+          }
         }
       }
     }
@@ -176,6 +250,8 @@ export async function getSugerenciasReabastecimiento(): Promise<Reabastecimiento
     let totalOptimos = 0
     let totalRunwayBajo = 0
     let presupuestoTotal = 0
+    let oportunidadesBalanceo = 0
+    let ahorroPotencialBalanceo = 0
 
     const LEAD_TIME_ESTANDAR = 5
 
@@ -208,6 +284,71 @@ export async function getSugerenciasReabastecimiento(): Promise<Reabastecimiento
         presupuestoTotal += proyeccion.inversionEstimada
       }
 
+      // Evaluar oportunidad de Balanceo Inter-Sedes (Transferir antes de Comprar)
+      let sugerenciaBalanceo: SugerenciaBalanceoSedes | null = null
+      const trasladoEnCurso = trasladosEnCursoSet.has(p.id)
+
+      if (almacenesList.length >= 2 && !trasladoEnCurso) {
+        const sedesEval = almacenesList.map((alm) => {
+          const stockSede = mapaStockPorSede[p.id]?.[alm.id] ?? 0
+          const ventasSede = mapaVentasPorSede[p.id]?.[alm.id] ?? 0
+          const demandaSede = ventasSede / 30
+          const ropSede = Math.ceil(
+            demandaSede * LEAD_TIME_ESTANDAR + Math.max(Math.ceil(demandaSede * 3), 2)
+          )
+          const excedente = Math.floor(stockSede - Math.max(ropSede, 4))
+          return {
+            id: alm.id,
+            nombre: alm.nombre,
+            es_principal: alm.es_principal,
+            stockSede,
+            ventasSede,
+            ropSede,
+            excedente,
+          }
+        })
+
+        // Sede receptora: menor stock relativo o bajo su ROP (prioriza sedes con demanda o principal)
+        const candidatasReceptoras = [...sedesEval]
+          .filter((s) => s.stockSede <= Math.max(s.ropSede, 2))
+          .sort((a, b) => {
+            if (a.stockSede !== b.stockSede) return a.stockSede - b.stockSede
+            return b.ventasSede - a.ventasSede
+          })
+
+        const receptora = candidatasReceptoras[0]
+        if (receptora) {
+          const emisora = [...sedesEval]
+            .filter((s) => s.id !== receptora.id && s.excedente >= 2)
+            .sort((a, b) => b.excedente - a.excedente)[0]
+
+          if (emisora) {
+            const necesidadReceptora = Math.max(
+              proyeccion.cantidadSugerida,
+              receptora.ropSede * 2 - receptora.stockSede,
+              4
+            )
+            const cantidadTransferible = Math.min(emisora.excedente, Math.ceil(necesidadReceptora))
+
+            if (cantidadTransferible >= 2) {
+              const ahorro = Math.round(cantidadTransferible * costo * 100) / 100
+              sugerenciaBalanceo = {
+                sede_emisora_id: emisora.id,
+                sede_emisora_nombre: emisora.nombre,
+                stock_emisora: emisora.stockSede,
+                sede_receptora_id: receptora.id,
+                sede_receptora_nombre: receptora.nombre,
+                stock_receptora: receptora.stockSede,
+                cantidad_transferible: cantidadTransferible,
+                ahorro_estimado_soles: ahorro,
+              }
+              oportunidadesBalanceo++
+              ahorroPotencialBalanceo += ahorro
+            }
+          }
+        }
+      }
+
       const catRel = Array.isArray(p.categoria) ? p.categoria[0] : p.categoria
       const provHabitual = mapaProveedorProducto[p.id] || (primerProv
         ? { id: primerProv.id, nombre: primerProv.razon_social }
@@ -234,14 +375,18 @@ export async function getSugerenciasReabastecimiento(): Promise<Reabastecimiento
         inversion_estimada: proyeccion.inversionEstimada,
         proveedor_sugerido_id: provHabitual.id,
         proveedor_sugerido_nombre: provHabitual.nombre,
+        sugerencia_balanceo: sugerenciaBalanceo,
+        traslado_en_curso: trasladoEnCurso,
       }
     })
 
-    // Priorizar críticos y menor runway primero
     const prioridad = { CRITICO: 0, REORDEN: 1, OPTIMO: 2 }
     articulos.sort((a, b) => {
       if (prioridad[a.estado] !== prioridad[b.estado]) {
         return prioridad[a.estado] - prioridad[b.estado]
+      }
+      if (Boolean(a.sugerencia_balanceo) !== Boolean(b.sugerencia_balanceo)) {
+        return a.sugerencia_balanceo ? -1 : 1
       }
       const runA = a.runway_dias ?? 9999
       const runB = b.runway_dias ?? 9999
@@ -257,6 +402,8 @@ export async function getSugerenciasReabastecimiento(): Promise<Reabastecimiento
         articulos_optimos: totalOptimos,
         articulos_runway_bajo: totalRunwayBajo,
         presupuesto_total_sugerido: Math.round(presupuestoTotal * 100) / 100,
+        oportunidades_balanceo: oportunidadesBalanceo,
+        ahorro_potencial_balanceo: Math.round(ahorroPotencialBalanceo * 100) / 100,
       },
     }
   })
