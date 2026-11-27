@@ -362,7 +362,13 @@ export function DashboardWidgetRenderer({ type, data }: WidgetRendererProps) {
             </table>
           </div>
 
-          <div className="pt-3 mt-2 border-t border-[#E7E5DF] text-right">
+          <div className="pt-3 mt-2 border-t border-[#E7E5DF] flex flex-wrap items-center justify-between gap-2">
+            <Link
+              href="/admin/compras?tab=reabastecimiento"
+              className="text-xs text-[#C97D1A] hover:underline inline-flex items-center gap-1 font-semibold"
+            >
+              Predictor Runway (ROP) <ArrowRight size={12} />
+            </Link>
             <Link
               href="/admin/inventario"
               className="text-xs text-[#16201C] hover:underline inline-flex items-center gap-1 font-semibold"

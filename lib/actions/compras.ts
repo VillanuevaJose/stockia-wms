@@ -203,6 +203,14 @@ export async function registrarCompraAction(
   return { success: true, compra_id: compraId || undefined }
 }
 
+const compraRapidaRopSchema = z.object({
+  producto_id: z.string().uuid('ID de producto inválido'),
+  cantidad: z.number().positive('La cantidad debe ser mayor a 0'),
+  costo_unitario: z.number().min(0, 'El costo unitario no puede ser negativo'),
+  proveedor_id: z.string().uuid().optional().nullable(),
+  almacen_id: z.string().uuid().optional(),
+})
+
 export async function generarCompraRapidaRopAction(params: {
   producto_id: string
   cantidad: number
@@ -210,6 +218,14 @@ export async function generarCompraRapidaRopAction(params: {
   proveedor_id?: string | null
   almacen_id?: string
 }): Promise<CompraResult> {
+  const validated = compraRapidaRopSchema.safeParse(params)
+  if (!validated.success) {
+    return {
+      success: false,
+      error: validated.error.issues[0]?.message || 'Parámetros de reabastecimiento inválidos.',
+    }
+  }
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -229,15 +245,20 @@ export async function generarCompraRapidaRopAction(params: {
     return { success: false, error: 'Usuario sin negocio asignado.' }
   }
 
+  if (usuario.rol === 'vendedor') {
+    return { success: false, error: 'Los vendedores no tienen permisos para emitir compras.' }
+  }
+
   const negocio_id = usuario.negocio_id
 
-  // 1. Resolver proveedor
-  let provId = params.proveedor_id
+  // 1. Resolver proveedor real del negocio (sin inventar datos ni RUC ficticios)
+  let provId = validated.data.proveedor_id
   if (!provId) {
     const { data: prov } = await supabase
       .from('proveedor')
       .select('id')
       .eq('negocio_id', negocio_id)
+      .eq('activo', true)
       .limit(1)
       .maybeSingle()
 
@@ -248,8 +269,7 @@ export async function generarCompraRapidaRopAction(params: {
         .from('proveedor')
         .insert({
           negocio_id,
-          razon_social: 'Distribuidora Ferretera Central S.A.C.',
-          ruc: '20100088921',
+          razon_social: 'Proveedor General',
           activo: true,
         })
         .select('id')
@@ -259,7 +279,7 @@ export async function generarCompraRapidaRopAction(params: {
   }
 
   // 2. Resolver almacén
-  let almId = params.almacen_id
+  let almId = validated.data.almacen_id
   if (!almId) {
     const { data: alm } = await supabase
       .from('almacen')
@@ -276,7 +296,7 @@ export async function generarCompraRapidaRopAction(params: {
   }
 
   const numeroComprobante = `OC-ROP-${Date.now().toString().slice(-6)}`
-  const total = params.cantidad * params.costo_unitario
+  const total = Math.round(validated.data.cantidad * validated.data.costo_unitario * 100) / 100
 
   // 3. Insertar orden de compra
   const { data: compra, error: cErr } = await supabase
@@ -290,7 +310,7 @@ export async function generarCompraRapidaRopAction(params: {
       fecha_emision: new Date().toISOString(),
       estado: 'RECIBIDA',
       total,
-      notas: 'Orden de reabastecimiento inteligente generada en 1 Clic (Algoritmo ROP).',
+      notas: 'Orden de reabastecimiento predictivo generada en 1 clic (Runway / ROP).',
     })
     .select('id')
     .single()
@@ -302,13 +322,13 @@ export async function generarCompraRapidaRopAction(params: {
   // 4. Detalle de compra
   await supabase.from('detalle_compra').insert({
     compra_id: compra.id,
-    producto_id: params.producto_id,
-    cantidad: params.cantidad,
-    costo_unitario: params.costo_unitario,
+    producto_id: validated.data.producto_id,
+    cantidad: validated.data.cantidad,
+    costo_unitario: validated.data.costo_unitario,
     subtotal: total,
   })
 
-  // 5. Ingreso de existencias al almacén
+  // 5. Ingreso de existencias al almacén mediante movimiento oficial
   await supabase.rpc('registrar_movimiento', {
     p_negocio_id: negocio_id,
     p_usuario_id: user.id,
@@ -320,9 +340,9 @@ export async function generarCompraRapidaRopAction(params: {
     p_referencia_id: compra.id,
     p_detalles: [
       {
-        producto_id: params.producto_id,
-        cantidad: params.cantidad,
-        costo_unitario: params.costo_unitario,
+        producto_id: validated.data.producto_id,
+        cantidad: validated.data.cantidad,
+        costo_unitario: validated.data.costo_unitario,
       },
     ],
   })
@@ -331,6 +351,7 @@ export async function generarCompraRapidaRopAction(params: {
   invalidateFastCache('inventario-fisico')
   invalidateFastCache('reabastecimiento-rop')
   invalidateFastCache('kardex-sunat')
+  invalidateFastCache('dashboard-data')
 
   revalidatePath('/admin/compras')
   revalidatePath('/admin/inventario')
