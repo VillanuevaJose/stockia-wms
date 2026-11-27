@@ -389,8 +389,8 @@ export function DashboardWidgetRenderer({ type, data }: WidgetRendererProps) {
               </h2>
               <span className="text-[11px] text-[#6B7A72]">Kardex reciente</span>
             </div>
-            <Link href="/admin/movimientos" className="text-[12px] text-[#6B7A72] hover:text-[#16201C] font-medium">
-              Auditoría
+            <Link href="/admin/auditoria" className="text-[12px] text-[#6B7A72] hover:text-[#16201C] font-medium">
+              Auditoría y Anomalías
             </Link>
           </div>
 
